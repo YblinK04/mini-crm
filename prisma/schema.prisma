@@ -1,0 +1,258 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  
+}
+
+
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String   // Название компании-клиента (например, "Барбершоп ТопГан" или "СТО АвтоЭксперт")
+  isActive  Boolean  @default(true) @map("is_active") // Возвращено для контроля лицензии/блокировки филиала
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users     User[]
+  pipelines Pipeline[]
+  deals     Deal[]       // Добавлено для сквозной изоляции сделок по филиалам
+  companies Company[]
+  contacts  Contact[]
+  auditLogs AuditLog[]
+
+  @@map("organizations")
+}
+
+model User {
+  id             String         @id @default(cuid())
+  email          String         @unique
+  password       String    
+  name           String?
+  role           Role           @default(MANAGER) // По умолчанию все сотрудники — менеджеры
+  image          String?
+  emailVerified  DateTime?
+  isActive       Boolean        @default(true) @map("is_active") // Возвращено для безопасного увольнения без удаления истории
+  
+  // Привязка к компании
+  organizationId String         @map("organization_id")
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  // Отношения
+  notifications  Notification[]
+  assignedDeals  Deal[]         @relation("DealAssignee") // Ответственный за сделки
+  activities     ActivityLog[]  // Записи менеджера в ленте активности
+  auditLogs      AuditLog[]     // Логи действий для безопасности
+  
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  
+  @@map("users")
+  @@index([organizationId, createdAt]) // Оптимизация вывода списка сотрудников
+}
+
+enum Role {
+  OWNER   // Владелец бизнеса (может всё, включая экспорт базы клиентов)
+  ADMIN   // Администратор системы
+  MANAGER // Менеджер по продажам (запрещен экспорт базы)
+}
+
+
+
+model Pipeline {
+  id             String       @id @default(cuid())
+  name           String       // Например: "Стрижки", "Продажа косметики", "Ремонт ДВС"
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  stages         Stage[]
+  deals          Deal[]
+
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  
+  @@map("pipelines")
+  @@index([organizationId, createdAt]) // Оптимизация вывода воронок филиала
+}
+
+model Stage {
+  id             String   @id @default(cuid())
+  name           String   // Название этапа, например: "Диагностика", "Ожидание запчастей", "Готово"
+  color          String   @default("#3b82f6") 
+  order          Int      @default(0) // Порядок колонки на доске
+  
+  pipelineId     String   @map("pipeline_id")
+  pipeline       Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  deals          Deal[]
+
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  
+  @@map("stages")
+  @@index([pipelineId, order]) // Идеально для сортировки колонок канбана
+}
+
+
+
+model Company {
+  id             String       @id @default(cuid())
+  name           String       // Название компании клиента (для B2B сделок)
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  contacts       Contact[]
+  deals          Deal[]
+
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  @@map("companies")
+  @@index([organizationId, createdAt])
+}
+
+model Contact {
+  id             String       @id @default(cuid())
+  firstName      String       @map("first_name")
+  lastName       String?      @map("last_name")
+  phone          String?      
+  email          String?      
+  socialLink     String?      @map("social_link") // Ссылка на Telegram / WhatsApp клиента
+  
+  // Сюда можно сохранять: {"Марка авто": "BMW", "Госномер": "А777АА", "День рождения": "12.05"}
+  customFields   Json?        @map("custom_fields") 
+
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  companyId      String?      @map("company_id")
+  company        Company?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  
+  deals          Deal[]       @relation("DealContacts") // Связь многие-ко-многим
+
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  @@map("contacts")
+  @@index([organizationId])
+  @@index([phone]) // Индекс для мгновенного поиска клиента по номеру телефона при звонке
+  @@index([companyId])
+}
+
+
+
+model Deal {
+  id             String        @id @default(cuid())
+  title          String        // Название сделки (например, "Запись: Иван - Стрижка и борода")
+  description    String?       @db.Text
+  budget         Int           @default(0) // Храним в копейках (Int). Быстро на слабом железе, совпадает с Zod!
+  priority       Priority      @default(MEDIUM)
+  order          Int           @default(0) // Порядок карточки внутри колонки
+  closeDate      DateTime?     @map("close_date") // Дата закрытия сделки
+  
+  customFields   Json?         @map("custom_fields")
+
+  // Возвращена хард-изоляция филиалов для корректной работы DealService и быстрого канбана
+  organizationId String        @map("organization_id")
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Привязки к воронке и этапу
+  pipelineId     String        @map("pipeline_id")
+  pipeline       Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stageId        String        @map("stage_id")
+  stage          Stage         @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  
+  // Ответственный менеджер/мастер
+  assigneeId     String?       @map("assignee_id")
+  assignee       User?         @relation("DealAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  
+  // Привязка к клиентам
+  companyId      String?       @map("company_id")
+  company        Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contacts       Contact[]     @relation("DealContacts")
+  
+  // Документы и история
+  documents      Document[]    // Локальные файлы договоров на диске сервера
+  activities     ActivityLog[] // Лента активности внутри карточки
+
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  
+  @@map("deals")
+  // Индекс для моментального рендеринга доски на слабом железе клиента
+  @@index([organizationId, pipelineId, stageId])
+  @@index([assigneeId])
+  @@index([companyId])
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Document {
+  id         String   @id @default(cuid())
+  name       String   // Имя файла, например "Акт_осмотра.pdf"
+  url        String   // Локальный путь, например "/uploads/171829_file.pdf"
+  storageKey String   @map("storage_key") // Имя файла на диске для удаления
+  size       Int      // Размер файла в байтах
+  
+  dealId     String   @map("deal_id")
+  deal       Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  
+  createdAt  DateTime @default(now()) @map("created_at")
+  
+  @@map("documents")
+  @@index([dealId])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  dealId    String   @map("deal_id")
+  deal      Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  
+  userId    String   @map("author_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  content   String   @db.Text // Текст заметки менеджера
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  @@map("activity_logs")
+  @@index([dealId, createdAt]) // Индекс для быстрого вывода и сортировки таймлайна в карточке
+}
+
+model AuditLog {
+  id             String       @id @default(cuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  userId         String?      @map("user_id")
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  action         String       // Например: "EXPORT_DATABASE_SUCCESS", "UNAUTHORIZED_ATTEMPT_EXPORT"
+  ipAddress      String?      @map("ip_address")
+  userAgent      String?      @map("user_agent")
+  metadata       Json?        // Детали лога безопасности (IP, устройство и т.д.)
+  
+  createdAt      DateTime     @default(now()) @map("created_at")
+  
+  @@map("audit_logs")
+  @@index([organizationId, createdAt]) // Оптимизация для вывода панели безопасности администратора
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("notifications")
+  @@index([userId, read]) // Индекс для моментального получения счетчика непрочитанных уведомлений
+}
