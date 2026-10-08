@@ -1,7 +1,16 @@
+// src/components/kanban/kanban-board.tsx
+
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { DndContext, closestCorners, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import {
+  DndContext,
+  closestCorners,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
 import { useDealStore, KanbanStage } from '@/store/useDealStore';
 import { useKanbanDnd } from '@/store/useKanbanDnd';
 import { KanbanColumn } from './kanban-column';
@@ -9,16 +18,29 @@ import { PipelineDataDTO } from '@/services/pipeline.service';
 import { Button } from '@/components/ui/button';
 import { Plus, Layers } from 'lucide-react';
 import { useStageMutations } from '@/store/mutations/useStageMutations';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 
 interface KanbanBoardProps {
   initialData: PipelineDataDTO;
+
+  initialOpenDealId?: string;
 }
 
-export default function KanbanBoard({ initialData }: KanbanBoardProps) {
+export default function KanbanBoard({
+  initialData,
+  initialOpenDealId,
+}: KanbanBoardProps) {
   const setPipelineData = useDealStore((state) => state.setPipelineData);
   const stages = useDealStore((state) => state.stages);
+
+  const openDealForEdit = useDealStore((state) => state.openDealForEdit);
 
   const [isStageDialogOpen, setIsStageDialogOpen] = useState(false);
   const [newStageName, setNewStageName] = useState('');
@@ -32,8 +54,21 @@ export default function KanbanBoard({ initialData }: KanbanBoardProps) {
     }
   }, [initialData, setPipelineData]);
 
+  useEffect(() => {
+    if (!isInitialized || !initialOpenDealId || !openDealForEdit) return;
+
+    const deal = initialData.stages
+      .flatMap((s) => s.deals)
+      .find((d) => d.id === initialOpenDealId);
+
+    if (deal) {
+      openDealForEdit(deal);
+    }
+
+  }, [isInitialized, initialOpenDealId, initialData, openDealForEdit]);
+
   const { handleDragOver, handleDragEnd } = useKanbanDnd(initialData.id);
-  
+
   const { createStage } = useStageMutations(initialData.id);
 
   const sensors = useSensors(
@@ -41,7 +76,7 @@ export default function KanbanBoard({ initialData }: KanbanBoardProps) {
       activationConstraint: {
         distance: 5,
       },
-    })
+    }),
   );
 
   const handleCreateStageSubmit = (e: React.FormEvent) => {
@@ -54,16 +89,19 @@ export default function KanbanBoard({ initialData }: KanbanBoardProps) {
       validatedColor = `#${validatedColor}`;
     }
 
-    createStage.mutate({
-      name: trimmedName,
-      color: validatedColor,
-    }, {
-      onSuccess: () => {
-        setNewStageName('');
-        setNewStageColor('#3b82f6');
-        setIsStageDialogOpen(false);
-      }
-    });
+    createStage.mutate(
+      {
+        name: trimmedName,
+        color: validatedColor,
+      },
+      {
+        onSuccess: () => {
+          setNewStageName('');
+          setNewStageColor('#3b82f6');
+          setIsStageDialogOpen(false);
+        },
+      },
+    );
   };
 
   if (!isInitialized || stages.length === 0) {
@@ -74,7 +112,11 @@ export default function KanbanBoard({ initialData }: KanbanBoardProps) {
         ))}
         <div className="w-80 h-[140px] flex flex-col bg-muted/5 border border-dashed border-muted-foreground/20 rounded-2xl p-4 shrink-0 justify-center items-center text-center">
           <Layers className="w-5 h-5 text-muted-foreground/30 mb-2" />
-          <Button variant="outline" disabled className="text-xs font-semibold gap-1.5 h-9 rounded-xl px-4 text-muted-foreground">
+          <Button
+            variant="outline"
+            disabled
+            className="text-xs font-semibold gap-1.5 h-9 rounded-xl px-4 text-muted-foreground"
+          >
             <Plus className="w-3.5 h-3.5" />
             <span>Добавить этап</span>
           </Button>
@@ -85,7 +127,7 @@ export default function KanbanBoard({ initialData }: KanbanBoardProps) {
 
   return (
     <>
-      <DndContext 
+      <DndContext
         id="crm-kanban-dnd-root"
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -102,7 +144,7 @@ export default function KanbanBoard({ initialData }: KanbanBoardProps) {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setIsStageDialogOpen(true)} 
+              onClick={() => setIsStageDialogOpen(true)}
               className="text-xs font-semibold gap-1.5 h-9 bg-background border-muted-foreground/15 text-muted-foreground hover:text-primary hover:border-primary/30 rounded-xl px-4 transition-all duration-200"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -117,7 +159,9 @@ export default function KanbanBoard({ initialData }: KanbanBoardProps) {
       <Dialog open={isStageDialogOpen} onOpenChange={setIsStageDialogOpen}>
         <DialogContent className="sm:max-w-[400px] border-none shadow-2xl bg-background text-foreground rounded-2xl">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold tracking-tight">Новый этап воронки</DialogTitle>
+            <DialogTitle className="text-xl font-bold tracking-tight">
+              Новый этап воронки
+            </DialogTitle>
           </DialogHeader>
 
           <form onSubmit={handleCreateStageSubmit} className="space-y-4 pt-2">

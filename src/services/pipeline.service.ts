@@ -275,6 +275,23 @@ export class PipelineService {
       ? executeAction(txContext)
       : await this.prisma.$transaction(async (tx) => executeAction(tx));
   }
+  
+   async getOrganizationPipelinesWithCounts(organizationId: string) {
+  return this.prisma.pipeline.findMany({
+    where: { organizationId },
+    orderBy: { createdAt: 'asc' },
+    include: {
+      _count: {
+        select: { stages: true, deals: true },
+      },
+      stages: {
+        orderBy: { order: 'asc' },
+        take: 1,
+        select: { color: true },
+      },
+    },
+  });
+}
 
   async updateStage(
     stageId: string,

@@ -1,86 +1,91 @@
 'use client';
 
-import { useActionState, useEffect, useState, useRef } from 'react';
+import { useActionState, useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { updateProfile, type ActionState } from '@/app/(dashboard)/settings/actions';
+import {
+  updateProfile,
+  type ActionState,
+} from '@/app/(dashboard)/settings/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Loader2, User } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 export function SettingsForm() {
   const { data: session, update } = useSession();
   const router = useRouter();
-  const [state, formAction, isPending] = useActionState(updateProfile, null);
-  
+  const [state, formAction, isPending] = useActionState<
+    ActionState | null,
+    FormData
+  >(updateProfile, null);
+
   const [name, setName] = useState('');
-  const lastProcessedSuccess = useRef(false);
-
+  const seeded = useRef(false);
   useEffect(() => {
-    if (session?.user?.name && !name && !isPending) {
+    if (seeded.current) return;
+    if (session?.user?.name) {
       setName(session.user.name);
+      seeded.current = true;
     }
-  }, [session?.user?.name, name, isPending]);
+  }, [session?.user?.name]);
 
-  
   useEffect(() => {
-    if (state?.success && !lastProcessedSuccess.current) {
-      lastProcessedSuccess.current = true;
-      
-      toast.success('Имя успешно изменено');
-
-      
-      update({ name }).then(() => {
-        
-        router.refresh();
-      });
+    if (state?.success) {
+      toast.success('Имя сохранено');
+     
+      update().then(() => router.refresh());
     }
+  }, [state, update, router]);
 
-    if (!state) {
-        lastProcessedSuccess.current = false;
-    }
-  }, [state, update, name, router]);
+  const sessionName = session?.user?.name ?? '';
+  const isUnchanged = name.trim() === sessionName.trim();
+  const fieldError = state?.fieldErrors?.name;
 
   return (
-    <form action={formAction} className="space-y-6" onSubmit={() => { lastProcessedSuccess.current = false; }}>
+    <form action={formAction} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="name" className="text-[10px] font-black uppercase text-muted-foreground/60 tracking-widest px-1">
-          Ваше имя пользователя
+        <Label
+          htmlFor="name"
+          className="text-xs font-medium text-muted-foreground"
+        >
+          Имя
         </Label>
-        <div className="relative">
-          <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          <Input
-            id="name"
-            name="name" 
-            value={name}
-            onChange={(e) => {
-                setName(e.target.value);
-                lastProcessedSuccess.current = false;
-            }}
-            className="pl-10 h-12 bg-background/50 border-none ring-1 ring-border focus-visible:ring-2"
-            placeholder="Введите имя"
-            disabled={isPending}
-          />
-        </div>
-        {state?.fieldErrors?.name && (
-          <p className="text-xs text-destructive">{state.fieldErrors.name}</p>
+        <Input
+          id="name"
+          name="name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="h-10"
+          placeholder="Введите имя"
+          disabled={isPending}
+          autoComplete="name"
+          aria-invalid={Boolean(fieldError)}
+          aria-describedby={fieldError ? 'name-error' : undefined}
+        />
+        {fieldError && (
+          <p id="name-error" className="text-xs text-destructive">
+            {fieldError}
+          </p>
         )}
       </div>
 
-      <Button 
-        type="submit" 
-        disabled={isPending || name === session?.user?.name || !name.trim()} 
-        className="w-full sm:w-auto px-10"
+      <Button
+        type="submit"
+        disabled={isPending || isUnchanged || !name.trim()}
+        className="w-full sm:w-auto px-6 h-10"
       >
         {isPending ? (
           <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <Loader2
+              className="mr-2 h-4 w-4 animate-spin"
+              aria-hidden="true"
+            />
             Сохранение...
           </>
         ) : (
-          'Обновить профиль'
+          'Сохранить'
         )}
       </Button>
     </form>

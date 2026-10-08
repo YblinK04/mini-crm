@@ -1,9 +1,9 @@
 import { prisma } from '@/lib/prisma';
 import { Deal } from '@prisma/client';
 import { 
-  CreateDealSchema, 
+   CreateDealApiSchema,
   UpdateDealSchema, 
-  type CreateDealInput, 
+ type CreateDealApiInput,
   type UpdateDealInput 
 } from '@/lib/schemas';
 
@@ -25,50 +25,54 @@ export class DealService {
   }
 
   
-  async create(data: CreateDealInput, organizationId: string, userId: string): Promise<Deal> {
-    const validateData = CreateDealSchema.parse(data);
+  async create(
+  data: CreateDealApiInput,
+  organizationId: string,
+  userId: string,
+): Promise<Deal> {
+  const validated = CreateDealApiSchema.parse(data);
 
-    return await this.prisma.$transaction(async (tx) => {
-      const lastDeal = await tx.deal.findFirst({
-        where: {
-          pipelineId: validateData.pipelineId,
-          stageId: validateData.stageId,
-          organizationId: organizationId, 
-        },
-        orderBy: { order: 'desc' },
-      });
-      const order = lastDeal ? lastDeal.order + 1 : 0;
-
-      const deal = await tx.deal.create({
-        data: {
-          title: validateData.title,
-          description: validateData.description || null,
-          budget: validateData.budget, 
-          priority: validateData.priority || 'MEDIUM',
-          order,
-          pipelineId: validateData.pipelineId,
-          stageId: validateData.stageId,
-          companyId: validateData.companyId || null,
-          organizationId: organizationId, 
-          customFields: validateData.customFields || {},
-          contacts: validateData.contactIds && validateData.contactIds.length > 0 
-            ? { connect: validateData.contactIds.map(id => ({ id })) }
-            : undefined,
-        },
-      });
-
-      await tx.activityLog.create({
-        data: {
-          dealId: deal.id,
-          userId: userId,
-          content: `Сделка успешно открыта. Начальный бюджет: ${validateData.budget / 100} ₽.`,
-        },
-      });
-
-      return deal;
+  return await this.prisma.$transaction(async (tx) => {
+    const lastDeal = await tx.deal.findFirst({
+      where: {
+        pipelineId: validated.pipelineId,
+        stageId: validated.stageId,
+        organizationId,
+      },
+      orderBy: { order: 'desc' },
     });
-  }
+    const order = lastDeal ? lastDeal.order + 1 : 0;
 
+    const deal = await tx.deal.create({
+      data: {
+        title: validated.title,
+        description: validated.description ?? null,
+        budget: validated.budget,
+        priority: validated.priority,
+        order,
+        pipelineId: validated.pipelineId,
+        stageId: validated.stageId,
+        companyId: validated.companyId ?? null,
+        organizationId,
+        customFields: validated.customFields,   // ← уже Record, без || {}
+        contacts:
+          validated.contactIds.length > 0
+            ? { connect: validated.contactIds.map((id) => ({ id })) }
+            : undefined,
+      },
+    });
+
+    await tx.activityLog.create({
+      data: {
+        dealId: deal.id,
+        userId,
+        content: `Сделка успешно открыта. Начальный бюджет: ${validated.budget / 100} ₽.`,
+      },
+    });
+
+    return deal;
+  });
+}
  
   async update(data: UpdateDealInput, organizationId: string, userId: string): Promise<Deal> {
     const validateData = UpdateDealSchema.parse(data);
@@ -226,7 +230,6 @@ export class DealService {
         data: { order: { decrement: 1 } },
       });
 
-      // Локальные файлы и логи активности удалятся автоматически благодаря onDelete: Cascade на уровне СУБД
       return await tx.deal.delete({ where: { id: dealId } });
     });
   }

@@ -1,11 +1,12 @@
 'use client';
 
-import { PipelineItem } from "@/components/projects/pipeline-item";
+import { PipelineItem } from '@/components/projects/pipeline-item';
 import { Trash2 } from 'lucide-react';
-import { Pipeline } from "@prisma/client"; 
+import { Pipeline } from '@prisma/client';
 
 interface SidebarSectionProps {
-  title: string;
+ 
+  title?: string;
   pipelines: (Omit<Pipeline, 'createdAt' | 'updatedAt'> & {
     createdAt: string;
     updatedAt: string;
@@ -15,23 +16,27 @@ interface SidebarSectionProps {
   onDelete: (id: string, name: string) => void;
 }
 
-export function SidebarSection({ 
-  title, 
-  pipelines, 
-  collapsed, 
-  isActive, 
-  onDelete 
+export function SidebarSection({
+  title,
+  pipelines,
+  collapsed,
+  isActive,
+  onDelete,
 }: SidebarSectionProps) {
   if (pipelines.length === 0) return null;
 
   return (
     <div className="space-y-1 mb-6">
-      {!collapsed && (
+      {!collapsed && title && (
         <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 px-2 mb-2">
           {title} ({pipelines.length})
         </h3>
       )}
-      <div className={collapsed ? 'flex flex-col items-center gap-2' : 'space-y-1'}>
+      <div
+        className={
+          collapsed ? 'flex flex-col items-center gap-2' : 'space-y-1'
+        }
+      >
         {pipelines.map((pipeline) => (
           <div key={pipeline.id} className="group relative w-full">
             <PipelineItem
@@ -41,7 +46,7 @@ export function SidebarSection({
             />
             {!collapsed && (
               <button
-                type="button" 
+                type="button"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();

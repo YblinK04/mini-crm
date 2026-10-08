@@ -15,11 +15,13 @@ model Organization {
   isActive  Boolean  @default(true) @map("is_active") // Возвращено для контроля лицензии/блокировки филиала
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-
+  tasks     Task[]
   users     User[]
   pipelines Pipeline[]
   deals     Deal[]       // Добавлено для сквозной изоляции сделок по филиалам
   companies Company[]
+  settings Settings? 
+   messages Message[]
   contacts  Contact[]
   auditLogs AuditLog[]
 
@@ -40,6 +42,8 @@ model User {
   organizationId String         @map("organization_id")
   organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   
+  tasksCreated    Task[] @relation("TaskCreatedBy")
+  tasksAssigned   Task[] @relation("TaskAssignedTo")
   // Отношения
   notifications  Notification[]
   assignedDeals  Deal[]         @relation("DealAssignee") // Ответственный за сделки
@@ -112,31 +116,67 @@ model Company {
   @@index([organizationId, createdAt])
 }
 
+model Message {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+
+  contactId      String   @map("contact_id")
+  dealId         String?  @map("deal_id")
+
+  channel        String   // 'TELEGRAM' | 'MAX'
+  direction      String   // 'IN' | 'OUT'
+
+  externalChatId    String @map("external_chat_id")
+  externalMessageId String @map("external_message_id")
+
+  content        String
+  attachments    Json?
+  rawPayload     Json?    @map("raw_payload")
+
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  deal         Deal?        @relation(fields: [dealId], references: [id], onDelete: SetNull)
+
+  @@unique([channel, externalChatId, externalMessageId])
+  @@index([organizationId, contactId, createdAt])
+  @@index([dealId, createdAt])
+  @@map("messages")
+}
+
 model Contact {
   id             String       @id @default(cuid())
   firstName      String       @map("first_name")
   lastName       String?      @map("last_name")
   phone          String?      
   email          String?      
-  socialLink     String?      @map("social_link") // Ссылка на Telegram / WhatsApp клиента
-  
-  // Сюда можно сохранять: {"Марка авто": "BMW", "Госномер": "А777АА", "День рождения": "12.05"}
+  socialLink     String?      @map("social_link")
+
+  // ── Мессенджеры ──
+  telegramChatId   String?    @map("telegram_chat_id")
+  telegramUsername String?    @map("telegram_username")
+  maxUserId        String?    @map("max_user_id")
+
   customFields   Json?        @map("custom_fields") 
 
   organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  
+   tasks         Task[]
   companyId      String?      @map("company_id")
   company        Company?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
   
-  deals          Deal[]       @relation("DealContacts") // Связь многие-ко-многим
+  deals          Deal[]       @relation("DealContacts")
 
+  messages       Message[]  
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
 
+  @@unique([organizationId, telegramChatId])
+  @@unique([organizationId, maxUserId])
   @@map("contacts")
   @@index([organizationId])
-  @@index([phone]) // Индекс для мгновенного поиска клиента по номеру телефона при звонке
+  @@index([phone])
   @@index([companyId])
 }
 
@@ -153,17 +193,14 @@ model Deal {
   
   customFields   Json?         @map("custom_fields")
 
-  // Возвращена хард-изоляция филиалов для корректной работы DealService и быстрого канбана
   organizationId String        @map("organization_id")
   organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  // Привязки к воронке и этапу
   pipelineId     String        @map("pipeline_id")
   pipeline       Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
   stageId        String        @map("stage_id")
   stage          Stage         @relation(fields: [stageId], references: [id], onDelete: Cascade)
-  
-  // Ответственный менеджер/мастер
+  tasks          Task[]
   assigneeId     String?       @map("assignee_id")
   assignee       User?         @relation("DealAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   
@@ -171,8 +208,8 @@ model Deal {
   companyId      String?       @map("company_id")
   company        Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
   contacts       Contact[]     @relation("DealContacts")
-  
-  // Документы и история
+   messages      Message[]
+
   documents      Document[]    // Локальные файлы договоров на диске сервера
   activities     ActivityLog[] // Лента активности внутри карточки
 
@@ -180,7 +217,6 @@ model Deal {
   updatedAt      DateTime      @updatedAt @map("updated_at")
   
   @@map("deals")
-  // Индекс для моментального рендеринга доски на слабом железе клиента
   @@index([organizationId, pipelineId, stageId])
   @@index([assigneeId])
   @@index([companyId])
@@ -195,10 +231,10 @@ enum Priority {
 
 model Document {
   id         String   @id @default(cuid())
-  name       String   // Имя файла, например "Акт_осмотра.pdf"
-  url        String   // Локальный путь, например "/uploads/171829_file.pdf"
-  storageKey String   @map("storage_key") // Имя файла на диске для удаления
-  size       Int      // Размер файла в байтах
+  name       String   
+  url        String   
+  storageKey String   @map("storage_key") 
+  size       Int      
   
   dealId     String   @map("deal_id")
   deal       Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
@@ -222,6 +258,25 @@ model ActivityLog {
   
   @@map("activity_logs")
   @@index([dealId, createdAt]) // Индекс для быстрого вывода и сортировки таймлайна в карточке
+}
+
+model Settings {
+  id             String   @id @default("singleton")
+  organizationId String   @unique @map("organization_id")
+
+  telegramBotToken      String? @map("telegram_bot_token")
+  telegramWebhookSecret String? @map("telegram_webhook_secret")
+  telegramBotUsername   String? @map("telegram_bot_username")
+
+  maxBotToken      String? @map("max_bot_token")
+  maxWebhookSecret String? @map("max_webhook_secret")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("settings")
 }
 
 model AuditLog {
@@ -255,4 +310,36 @@ model Notification {
 
   @@map("notifications")
   @@index([userId, read]) // Индекс для моментального получения счетчика непрочитанных уведомлений
+}
+
+model Task {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+
+  title          String
+  description    String?
+  dueAt          DateTime @map("due_at")
+  completedAt    DateTime? @map("completed_at")
+
+  createdById    String   @map("created_by_id")
+  assignedToId   String?  @map("assigned_to_id")
+
+  dealId         String?  @map("deal_id")
+  contactId      String?  @map("contact_id")
+
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  assignedTo   User?        @relation("TaskAssignedTo", fields: [assignedToId], references: [id])
+  deal         Deal?        @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, completedAt, dueAt])
+  @@index([organizationId, assignedToId, completedAt])
+  @@index([organizationId, createdAt])
+  @@index([dealId])
+  @@index([contactId])
+  @@map("tasks")
 }

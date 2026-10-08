@@ -96,7 +96,7 @@ export default function RegisterPage() {
         <CardHeader className="space-y-1 text-center">
           <CardTitle className="text-2xl font-bold tracking-tight">Создать аккаунт</CardTitle>
           <CardDescription>
-            Заполните данные, чтобы начать работу в RealTask
+            Заполните данные, чтобы начать работу.
           </CardDescription>
         </CardHeader>
         <CardContent>

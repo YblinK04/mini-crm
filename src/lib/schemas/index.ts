@@ -1,10 +1,18 @@
-// src/lib/schemas/index.ts (Часть 1)
 import { z } from 'zod';
 
 
 export const UserRoleEnum = z.enum(["OWNER", "ADMIN", "MANAGER"]);
 export const DealPriorityEnum = z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']);
 export const ActivityTypeEnum = z.enum(['NOTE', 'SYSTEM_STAGE', 'SYSTEM_BUDGET', 'SYSTEM_TASK']);
+
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .transform((v) => (v.length === 0 ? null : v))
+    .nullable()
+    .optional();
 
 const PHONE_REGEX = /^\+?[\d\s\-\(\)]{7,20}$/;
 
@@ -151,7 +159,6 @@ export const CreateDealSchema = z.object({
     .optional()
     .nullable(),
   
-  // Вход может быть строкой из инпута или числом, выход — всегда строгое целое число (number)
   budget: z.union([z.number(), z.string()])
     .transform((val) => {
       if (val === '' || val === undefined || val === null) return 0;
@@ -170,7 +177,6 @@ export const CreateDealSchema = z.object({
     .optional()
     .default([]),
 
-  // Строго описываем: на входе HTML-массив полей формы, на выходе — Record объект для базы
   customFields: z
     .array(
       z.object({
@@ -215,7 +221,57 @@ export const CreateActivityNoteSchema = z.object({
   dealId: z.string().cuid(),
 });
 
+export const CreateDealApiSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(3000).optional().nullable(),
+  budget: z.number().int().nonnegative().max(100_000_000_000).default(0),
+  priority: DealPriorityEnum.default('MEDIUM'),
+  pipelineId: z.string().cuid(),
+  stageId: z.string().cuid(),
+  companyId: z.string().cuid().optional().nullable(),
+  contactIds: z.array(z.string().cuid()).max(30).default([]),
+  customFields: z.record(z.string(), z.string().max(500)).default({}),
+});
 
+export const TaskSchema = z.object({
+  id: z.string().cuid(),
+  organizationId: z.string().cuid(),
+  title: z.string(),
+  description: z.string().nullable(),
+  dueAt: z.date(),
+  completedAt: z.date().nullable(),
+  dealId: z.string().cuid().nullable(),
+  contactId: z.string().cuid().nullable(),
+  createdById: z.string().cuid(),
+  assignedToId: z.string().cuid().nullable(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export const CreateTaskSchema = z.object({
+  title: z.string().trim().min(1, 'Название задачи обязательно').max(200),
+  description: optionalText(2000),
+  dueAt: z.coerce.date(),
+  dealId: z.string().cuid().nullable().optional(),
+  contactId: z.string().cuid().nullable().optional(),
+  assignedToId: z.string().cuid().nullable().optional(),
+});
+
+
+export const UpdateTaskSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200).optional(),
+    description: optionalText(2000),
+    dueAt: z.coerce.date().optional(),
+    completedAt: z.coerce.date().nullable().optional(),
+    dealId: z.string().cuid().nullable().optional(),
+    contactId: z.string().cuid().nullable().optional(),
+    assignedToId: z.string().cuid().nullable().optional(),
+  })
+  .refine(
+    (d) => Object.values(d).some((v) => v !== undefined),
+    { message: 'Укажите хотя бы одно поле для обновления' },
+  );
 
 
 export type User = z.infer<typeof UserSchema>;
@@ -241,3 +297,7 @@ export type ActivityLog = z.infer<typeof ActivityLogSchema>;
 export type CreateActivityNoteInput = z.infer<typeof CreateActivityNoteSchema>;
 export type CreateDealInput = z.input<typeof CreateDealSchema>
 export type CreateDealOutput = z.infer<typeof CreateDealSchema>;
+export type CreateDealApiInput = z.infer<typeof CreateDealApiSchema>;
+export type TaskDTO = z.infer<typeof TaskSchema>;
+export type CreateTaskInput = z.infer<typeof CreateTaskSchema>;
+export type UpdateTaskInput = z.infer<typeof UpdateTaskSchema>;
