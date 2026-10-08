@@ -18,7 +18,6 @@ export function formatRelativeTime(date: Date | string): string {
   const d = new Date(date);
   const now = new Date();
   
-  // ИСПРАВЛЕНО: Защита от отрицательной разницы из-за рассинхронизации часов сервера и клиента
   const diffInMs = now.getTime() - d.getTime();
   if (diffInMs < 0) return 'Только что';
   

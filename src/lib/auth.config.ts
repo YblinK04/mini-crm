@@ -1,14 +1,12 @@
-// src/app/api/auth/auth.config.ts
 import type { NextAuthConfig } from 'next-auth';
 import { Role } from '@prisma/client';
 
-
-declare module "next-auth" {
+declare module 'next-auth' {
   interface User {
     id: string;
     role: Role;
     isActive: boolean;
-    organizationId: string; 
+    organizationId: string;
   }
 
   interface Session {
@@ -16,18 +14,17 @@ declare module "next-auth" {
       id: string;
       role: Role;
       isActive: boolean;
-      organizationId: string; 
-    } & import("next-auth").DefaultSession["user"];
+      organizationId: string;
+    } & import('next-auth').DefaultSession['user'];
   }
 }
 
-
-declare module "next-auth/jwt" {
+declare module 'next-auth/jwt' {
   interface JWT {
     id: string;
     role: Role;
     isActive: boolean;
-    organizationId: string; 
+    organizationId: string;
     updatedAt?: number;
   }
 }
@@ -39,7 +36,6 @@ interface CustomSessionUpdate {
 export const authConfig: NextAuthConfig = {
   providers: [],
   callbacks: {
-   
     async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
@@ -50,13 +46,12 @@ export const authConfig: NextAuthConfig = {
         token.updatedAt = token.updatedAt ?? Date.now();
       }
 
-      if (trigger === "update" && session) {
+      if (trigger === 'update' && session) {
         const updateData = session as CustomSessionUpdate;
         if (updateData.name) token.name = updateData.name;
       }
       return token;
     },
-
 
     async session({ session, token }) {
       if (session.user && token) {
@@ -64,19 +59,19 @@ export const authConfig: NextAuthConfig = {
         session.user.role = token.role;
         session.user.organizationId = token.organizationId;
         session.user.isActive = token.isActive;
-        session.user.name = token.name ?? "";
+        session.user.name = token.name ?? '';
       }
       return session;
-    }
+    },
   },
   pages: {
     signIn: '/login',
-    error: '/error'
+    error: '/error',
   },
   session: {
     strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60, 
-    updateAge: 24 * 60 * 60,   
+    maxAge: 30 * 24 * 60 * 60,
+    updateAge: 24 * 60 * 60,
   },
-  secret: process.env.NEXTAUTH_SECRET
+  secret: process.env.NEXTAUTH_SECRET,
 };

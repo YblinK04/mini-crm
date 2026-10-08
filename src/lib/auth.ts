@@ -1,4 +1,3 @@
-// src/lib/auth.ts
 import NextAuth, { type Session, type User as NextAuthUser } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import { authConfig } from './auth.config';
@@ -8,11 +7,15 @@ import { LoginSchema } from '@/lib/schemas';
 import { Role } from '@prisma/client';
 import { type JWT } from 'next-auth/jwt';
 
-const DUMMY_HASH = '$2a$10$AzR7G9pBYXzUhcS6K8UnbO5Z6KxN8Y6Q8YyGqK6v8z8z8z8z8z8z.';
-
+const DUMMY_HASH =
+  '$2a$10$AzR7G9pBYXzUhcS6K8UnbO5Z6KxN8Y6Q8YyGqK6v8z8z8z8z8z8z.';
 
 const nodeAuthConfig = {
   ...authConfig,
+
+  // ← ДОБАВЛЕНО: доверяем хосту (on-prem, один инстанс, не SaaS)
+  trustHost: true,
+
   providers: [
     Credentials({
       name: 'Credentials',
@@ -21,7 +24,9 @@ const nodeAuthConfig = {
           const validatedFields = LoginSchema.safeParse(credentials);
 
           if (!validatedFields.success) {
-            console.error(" [AUTH_VALIDATION_ERROR] Некорректные параметры запроса.");
+            console.error(
+              ' [AUTH_VALIDATION_ERROR] Некорректные параметры запроса.',
+            );
             return null;
           }
 
@@ -31,20 +36,36 @@ const nodeAuthConfig = {
           const masterEmail = process.env.MASTER_ADMIN_EMAIL;
           const masterPassword = process.env.MASTER_ADMIN_PASSWORD;
 
-          if (masterEmail && masterPassword && formattedEmail === masterEmail.toLowerCase().trim() && password === masterPassword) {
-            console.log("👑 [AUTH_MASTER] Вход Главного Владельца из системного файла .env");
+          if (
+            masterEmail &&
+            masterPassword &&
+            formattedEmail === masterEmail.toLowerCase().trim() &&
+            password === masterPassword
+          ) {
+            console.log(
+              '👑 [AUTH_MASTER] Вход Главного Владельца из системного файла .env',
+            );
 
             let adminUser = await prisma.user.findUnique({
               where: { email: formattedEmail },
-              select: { id: true, name: true, email: true, role: true, organizationId: true, isActive: true }
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+                organizationId: true,
+                isActive: true,
+              },
             });
 
             if (!adminUser) {
-              console.log("🌱 [AUTH_SEED] Обнаружен первый запуск CRM. Атомарная инициализация локальной СУБД...");
-              
+              console.log(
+                '🌱 [AUTH_SEED] Обнаружен первый запуск CRM. Атомарная инициализация локальной СУБД...',
+              );
+
               adminUser = await prisma.$transaction(async (tx) => {
                 const defaultOrg = await tx.organization.create({
-                  data: { name: "Наша Компания / Главный офис" }
+                  data: { name: 'Наша Компания / Главный офис' },
                 });
 
                 const hashedAdminPassword = await hash(masterPassword, 10);
@@ -53,15 +74,24 @@ const nodeAuthConfig = {
                   data: {
                     email: formattedEmail,
                     password: hashedAdminPassword,
-                    name: "Администратор (Владелец)",
-                    role: "OWNER",
+                    name: 'Администратор (Владелец)',
+                    role: 'OWNER',
                     organizationId: defaultOrg.id,
-                    isActive: true
+                    isActive: true,
                   },
-                  select: { id: true, name: true, email: true, role: true, organizationId: true, isActive: true }
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    role: true,
+                    organizationId: true,
+                    isActive: true,
+                  },
                 });
               });
-              console.log("✅ [AUTH_SEED_SUCCESS] Стартовая экосистема успешно развернута в локальном PostgreSQL!");
+              console.log(
+                '✅ [AUTH_SEED_SUCCESS] Стартовая экосистема успешно развернута в локальном PostgreSQL!',
+              );
             }
 
             return {
@@ -70,59 +100,75 @@ const nodeAuthConfig = {
               email: adminUser.email,
               role: adminUser.role as Role,
               organizationId: adminUser.organizationId,
-              isActive: adminUser.isActive
+              isActive: adminUser.isActive,
             };
           }
 
           const user = await prisma.user.findUnique({
             where: { email: formattedEmail },
-            select: { id: true, name: true, email: true, password: true, role: true, organizationId: true, isActive: true }
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              password: true,
+              role: true,
+              organizationId: true,
+              isActive: true,
+            },
           });
 
           const passwordToCompare = user?.password ?? DUMMY_HASH;
           const passwordsMatch = await compare(password, passwordToCompare);
 
           if (!user || !passwordsMatch) {
-            console.warn(` [AUTH_INVALID_ATTEMPT] Неудачный вход для аккаунта: ${formattedEmail}`);
+            console.warn(
+              ` [AUTH_INVALID_ATTEMPT] Неудачный вход для аккаунта: ${formattedEmail}`,
+            );
             return null;
           }
 
           if (!user.isActive) {
-            console.warn(` [AUTH_SUSPENDED_ACCESS] Деактивированный сотрудник попытался войти. ID: ${user.id}`);
+            console.warn(
+              ` [AUTH_SUSPENDED_ACCESS] Деактивированный сотрудник попытался войти. ID: ${user.id}`,
+            );
             return null;
           }
 
-          console.log(`✅ [AUTH_SUCCESS] УСПЕШНЫЙ ВХОД. Сотрудник: ${user.id}, Контекст филиала: ${user.organizationId}`);
-          
+          console.log(
+            `✅ [AUTH_SUCCESS] УСПЕШНЫЙ ВХОД. Сотрудник: ${user.id}, Контекст филиала: ${user.organizationId}`,
+          );
+
           return {
             id: user.id,
             name: user.name,
             email: user.email,
             role: user.role as Role,
             organizationId: user.organizationId,
-            isActive: user.isActive
+            isActive: user.isActive,
           };
         } catch (error) {
-          console.error(" [AUTH_CRITICAL_EXCEPTION] Системный сбой в методе authorize:", error);
+          console.error(
+            ' [AUTH_CRITICAL_EXCEPTION] Системный сбой в методе authorize:',
+            error,
+          );
           return null;
         }
       },
     }),
   ],
+
   callbacks: {
- 
-    async jwt({ 
-      token, 
-      user, 
-      trigger, 
-      session 
-    }: { 
-      token: JWT; 
-      user?: NextAuthUser | any; 
-      trigger?: "signIn" | "signUp" | "update"; 
-      session?: any; 
+    async jwt({
+      token,
+      user,
+      trigger,
+      session,
+    }: {
+      token: JWT;
+      user?: NextAuthUser | any;
+      trigger?: 'signIn' | 'signUp' | 'update';
+      session?: any;
     }): Promise<JWT> {
-      
       if (user) {
         token.id = user.id;
         token.role = user.role;
@@ -133,7 +179,7 @@ const nodeAuthConfig = {
         return token;
       }
 
-      if (trigger === "update" && session?.name) {
+      if (trigger === 'update' && session?.name) {
         token.name = session.name as string;
         token.updatedAt = Date.now();
         return token;
@@ -141,20 +187,27 @@ const nodeAuthConfig = {
 
       if (token && token.id) {
         const fiveMinutesAgo = Date.now() - 300000;
-        
+
         if (!token.updatedAt || token.updatedAt < fiveMinutesAgo) {
           try {
             const freshUser = await prisma.user.findUnique({
               where: { id: token.id },
-              select: { isActive: true, role: true, name: true, organizationId: true }
+              select: {
+                isActive: true,
+                role: true,
+                name: true,
+                organizationId: true,
+              },
             });
 
             if (!freshUser || !freshUser.isActive) {
-              console.warn(` [AUTH_LIVE_KICK] Доступ к системе заблокирован рантаймом для ID: ${token.id}`);
+              console.warn(
+                ` [AUTH_LIVE_KICK] Доступ к системе заблокирован рантаймом для ID: ${token.id}`,
+              );
               return {
                 ...token,
-                id: "",
-                organizationId: "",
+                id: '',
+                organizationId: '',
                 isActive: false,
               };
             }
@@ -165,7 +218,10 @@ const nodeAuthConfig = {
             token.isActive = freshUser.isActive;
             token.updatedAt = Date.now();
           } catch (dbError) {
-            console.error(" [AUTH_LIVE_SYNC_FAILED] Ошибка фоновой проверки сессии в PostgreSQL:", dbError);
+            console.error(
+              ' [AUTH_LIVE_SYNC_FAILED] Ошибка фоновой проверки сессии в PostgreSQL:',
+              dbError,
+            );
           }
         }
       }
@@ -173,17 +229,16 @@ const nodeAuthConfig = {
       return token;
     },
 
-    async session({ 
-      session, 
-      token 
-    }: { 
-      session: Session; 
-      token: JWT; 
+    async session({
+      session,
+      token,
+    }: {
+      session: Session;
+      token: JWT;
     }): Promise<Session> {
-      
       if (token && !token.isActive && session.user) {
-        session.user.id = "";
-        session.user.organizationId = "";
+        session.user.id = '';
+        session.user.organizationId = '';
         session.user.isActive = false;
         return session;
       }
@@ -193,18 +248,18 @@ const nodeAuthConfig = {
         session.user.role = token.role;
         session.user.organizationId = token.organizationId;
         session.user.isActive = token.isActive;
-        session.user.name = token.name ?? "";
+        session.user.name = token.name ?? '';
       }
-      
+
       return session;
-    }
-  }
+    },
+  },
 };
 
-export const { 
-  handlers, 
-  auth, 
-  signIn, 
+export const {
+  handlers,
+  auth,
+  signIn,
   signOut,
-  unstable_update: updateSession 
+  unstable_update: updateSession,
 } = NextAuth(nodeAuthConfig);

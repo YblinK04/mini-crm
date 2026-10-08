@@ -1,5 +1,3 @@
-// src/components/layout/sidebar-client.tsx
-
 'use client';
 
 import { useCallback, useState } from 'react';
@@ -24,7 +22,6 @@ import { SidebarNav } from './sidebar/sidebar-nav';
 import { deletePipelineAction } from '@/app/(dashboard)/pipelines/actions';
 import { CreatePipelineDialog } from '../projects/create-pipeline-dialog';
 
-/** Сколько воронок показывать в сайдбаре. Остальные — на странице. */
 const SIDEBAR_PIPELINES_LIMIT = 5;
 const COLLAPSED_KEY = 'sidebar:collapsed';
 
@@ -116,7 +113,6 @@ export function SidebarClient({
         hideToggle={isMobile}
       />
 
-      {/* Навигация */}
       <nav
         aria-label="Основная навигация"
         className="space-y-0.5 px-3 pt-4"
@@ -135,9 +131,7 @@ export function SidebarClient({
         />
       </nav>
 
-      {/* Воронки */}
       <div className="flex min-h-0 flex-1 flex-col px-3 pt-6">
-        {/* Заголовок секции */}
         {!isCurrentlyCollapsed ? (
           <div className="mb-1 flex items-center justify-between px-2">
             <button
@@ -181,7 +175,6 @@ export function SidebarClient({
           </div>
         )}
 
-        {/* Список воронок — только если развёрнут */}
         {pipelinesOpen && (
           <div className="flex min-h-0 flex-1 flex-col">
             <ScrollArea className="min-h-0 flex-1">
@@ -195,7 +188,6 @@ export function SidebarClient({
               </div>
             </ScrollArea>
 
-            {/* Ссылка «Все воронки» — если есть скрытые */}
             {!isCurrentlyCollapsed && hasOverflow && (
               <Link
                 href="/pipelines"

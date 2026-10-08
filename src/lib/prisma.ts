@@ -1,11 +1,9 @@
-// src/lib/prisma.ts
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
 
 declare global {
-  // eslint-disable-next-line no-var
   var prismaInstance: PrismaClient | undefined;
 }
 
@@ -13,20 +11,17 @@ declare global {
 function createPrismaClient(): PrismaClient {
   const isDevelopment = process.env.NODE_ENV === "development";
 
-  // 1. Создаем классический пул соединений Node-Postgres
   const pool = new pg.Pool({
     connectionString: process.env.DATABASE_URL,
-    max: 20, // Ограничиваем пул до 20 конкурентных слоев для On-Premise серверов
+    max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,
   });
 
-  // 2. Инициализируем официальный драйвер-адаптер Prisma 7/8
   const adapter = new PrismaPg(pool);
 
-  // 3. Передаем адаптер в конструктор Prisma Client
   const client = new PrismaClient({
-    adapter, // Нативный мост к локальной СУБД PostgreSQL
+    adapter,
     log: isDevelopment 
       ? [
           { emit: "event", level: "query" },
