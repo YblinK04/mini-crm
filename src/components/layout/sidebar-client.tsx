@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   ArrowRight,
   ChevronDown,
+  Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -127,6 +128,12 @@ export function SidebarClient({
           href="/today"
           icon={CalendarCheck}
           label="Сегодня"
+          collapsed={isCurrentlyCollapsed}
+        />
+          <SidebarNav
+          href="/contacts"
+          icon={Users}
+          label="Клиенты"
           collapsed={isCurrentlyCollapsed}
         />
       </nav>

@@ -1,8 +1,8 @@
-// src/app/api/deals/[id]/route.ts
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { isPrismaNotFound } from "@/lib/errors";
 
 interface RouteContext {
   params: Promise<{
@@ -11,14 +11,16 @@ interface RouteContext {
 }
 
 const patchDealSchema = z.object({
-  stageId: z.string().optional(),
+  stageId: z.string().cuid().optional(),
   order: z.number().int().optional(),
-  
+
   title: z.string().min(1).max(255).optional(),
   description: z.string().nullable().optional(),
   budget: z.number().min(0).optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
   customFields: z.record(z.string(), z.string()).optional(),
+
+  contactIds: z.array(z.string().cuid()).optional(),
 });
 
 export const GET = auth(async (req, ctx) => {
@@ -32,16 +34,11 @@ export const GET = auth(async (req, ctx) => {
     const { id: dealId } = await (ctx as unknown as RouteContext).params;
 
     const deal = await prisma.deal.findFirst({
-      where: {
-        id: dealId,
-        organizationId 
-      },
+      where: { id: dealId, organizationId },
       include: {
         company: true,
         contacts: true,
-        documents: {
-          orderBy: { createdAt: 'desc' }
-        },
+        documents: { orderBy: { createdAt: 'desc' } },
         activities: {
           orderBy: { createdAt: 'desc' },
           include: {
@@ -75,49 +72,106 @@ export const PATCH = auth(async (req, ctx) => {
 
   try {
     const { id: dealId } = await (ctx as unknown as RouteContext).params;
-    const jsonBody = await req.json();
-    
+
+    const jsonBody = await req.json().catch(() => null);
+    if (!jsonBody) {
+      return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
+    }
+
     const parsedBody = patchDealSchema.safeParse(jsonBody);
     if (!parsedBody.success) {
-      return NextResponse.json({ 
-        error: "Некорректный формат переданных данных", 
-        details: parsedBody.error.flatten() 
+      return NextResponse.json({
+        error: "Некорректный формат переданных данных",
+        details: parsedBody.error.flatten()
       }, { status: 400 });
     }
 
     const data = parsedBody.data;
-
-    const checkDeal = await prisma.deal.findFirst({
-      where: { id: dealId, organizationId }
+    const existingDeal = await prisma.deal.findFirst({
+      where: { id: dealId, organizationId },
+      select: { id: true, pipelineId: true },
     });
-
-    if (!checkDeal) {
-      return NextResponse.json({ error: "Сделка не найдена в вашей организации" }, { status: 404 });
+    if (!existingDeal) {
+      return NextResponse.json(
+        { error: "Сделка не найдена в вашей организации" },
+        { status: 404 },
+      );
     }
 
-    const updateData: Record<string, any> = {};
+    if (data.stageId) {
+      const stage = await prisma.stage.findFirst({
+        where: {
+          id: data.stageId,
+          pipelineId: existingDeal.pipelineId,
+        },
+        select: { id: true },
+      });
+      if (!stage) {
+        return NextResponse.json(
+          { error: "Этап не найден в пайплайне этой сделки" },
+          { status: 400 },
+        );
+      }
+    }
 
-    if (data.stageId !== undefined) updateData.stageId = data.stageId;
-    if (data.order !== undefined) updateData.order = data.order;
+    if (data.contactIds && data.contactIds.length > 0) {
+      const owned = await prisma.contact.findMany({
+        where: {
+          id: { in: data.contactIds },
+          organizationId,
+        },
+        select: { id: true },
+      });
+      if (owned.length !== data.contactIds.length) {
+        return NextResponse.json(
+          { error: "Некоторые контакты не найдены в вашей организации" },
+          { status: 400 },
+        );
+      }
+    }
 
-    if (data.title !== undefined) updateData.title = data.title;
-    if (data.description !== undefined) updateData.description = data.description;
-    if (data.budget !== undefined) updateData.budget = data.budget;
-    if (data.priority !== undefined) updateData.priority = data.priority;
-    if (data.customFields !== undefined) updateData.customFields = data.customFields;
+    const updateData = {
+      ...(data.stageId !== undefined && { stageId: data.stageId }),
+      ...(data.order !== undefined && { order: data.order }),
+      ...(data.title !== undefined && { title: data.title }),
+      ...(data.description !== undefined && { description: data.description }),
+      ...(data.budget !== undefined && { budget: data.budget }),
+      ...(data.priority !== undefined && { priority: data.priority }),
+      ...(data.customFields !== undefined && { customFields: data.customFields }),
+    };
 
-    if (Object.keys(updateData).length === 0) {
+    if (Object.keys(updateData).length === 0 && data.contactIds === undefined) {
       return NextResponse.json({ error: "Отсутствуют поля для обновления" }, { status: 400 });
     }
 
     const updatedDeal = await prisma.deal.update({
-      where: { id: dealId },
-      data: updateData,
+      where: { id: dealId, organizationId },
+      data: {
+        ...updateData,
+        ...(data.contactIds !== undefined && {
+          contacts: {
+            set: data.contactIds.map((cId) => ({ id: cId })),
+          },
+        }),
+      },
+      include: {
+        contacts: {
+          select: { id: true, firstName: true, lastName: true },
+        },
+      },
     });
 
     return NextResponse.json({ success: true, data: updatedDeal });
   } catch (error: unknown) {
     console.error(`[CRM_API_DEAL_PATCH_FAILED]`, error);
+
+    if (isPrismaNotFound(error)) {
+      return NextResponse.json(
+        { error: "Сделка не найдена в вашей организации" },
+        { status: 404 },
+      );
+    }
+
     return NextResponse.json({ error: "Не удалось обновить данные сделки" }, { status: 500 });
   }
 });
@@ -128,56 +182,51 @@ export const DELETE = auth(async (req, ctx) => {
   if (!userId || !organizationId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
   try {
     const { id: dealId } = await (ctx as unknown as RouteContext).params;
     if (!dealId) {
       return NextResponse.json({ error: "Идентификатор сделки не указан" }, { status: 400 });
     }
+
     const existingDeal = await prisma.deal.findFirst({
-      where: { id: dealId, organizationId }
+      where: { id: dealId, organizationId },
+      select: { id: true, title: true },
     });
     if (!existingDeal) {
       return NextResponse.json({ error: "Сделка не найдена или доступ ограничен" }, { status: 404 });
     }
-    
-    
-    const deletedDeal = await prisma.$transaction(async (tx) => {
-      if ('activity' in tx) {
-        await (tx as any).activity.deleteMany({ where: { dealId } });
-      } else if ('dealActivity' in tx) {
-        await (tx as any).dealActivity.deleteMany({ where: { dealId } });
-      } else if ('activities' in tx) {
-        await (tx as any).activities.deleteMany({ where: { dealId } });
-      }
 
-      if ('document' in tx) {
-        await (tx as any).document.deleteMany({ where: { dealId } });
-      } else if ('documents' in tx) {
-        await (tx as any).documents.deleteMany({ where: { dealId } });
-      }
+    await prisma.deal.delete({
+      where: { id: dealId, organizationId },
+    });
 
-      if ('comment' in tx) {
-        await (tx as any).comment.deleteMany({ where: { dealId } });
-      } else if ('comments' in tx) {
-        await (tx as any).comments.deleteMany({ where: { dealId } });
-      }
-
-      return await tx.deal.delete({
-        where: { id: dealId },
+    try {
+      await prisma.notification.create({
+        data: {
+          userId,
+          title: "Сделка удалена 🗑️",
+          message: `Сделка "${existingDeal.title}" была успешно удалена менеджером.`,
+        },
       });
-    });
+    } catch (notifyError) {
+      console.error("[CRM_API_DEAL_DELETE_NOTIFY_FAILED]", notifyError);
+    }
 
-    await prisma.notification.create({
-      data: {
-        userId,
-        title: "Сделка удалена 🗑️",
-        message: `Сделка "${deletedDeal.title}" была успешно удалена менеджером.`,
-      },
-    });
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     console.error(`[CRM_API_DEAL_DELETE_CRITICAL_FAILED]`, error);
-    const msg = error instanceof Error ? error.message : "Внутренняя ошибка СУБД";
-    return NextResponse.json({ error: "Не удалось удалить сделку из-за ограничений СУБД", details: msg }, { status: 500 });
+
+    if (isPrismaNotFound(error)) {
+      return NextResponse.json(
+        { error: "Сделка не найдена или доступ ограничен" },
+        { status: 404 },
+      );
+    }
+
+    return NextResponse.json(
+      { error: "Не удалось удалить сделку из-за ограничений СУБД" },
+      { status: 500 },
+    );
   }
 });

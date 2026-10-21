@@ -1,6 +1,6 @@
 
 
-const API_BASE = 'https://api.telegram.org';
+const API_BASE = 'https://telegram-proxy.yar-yazevv.workers.dev';
 const REQUEST_TIMEOUT_MS = 15_000;
 
 export class TelegramApiError extends Error {
@@ -88,7 +88,7 @@ export async function setWebhook(
   return callTelegram<boolean>(botToken, 'setWebhook', {
     url,
     secret_token: secretToken,
-    allowed_updates: ['message'], // пока только обычные сообщения
+    allowed_updates: ['message'], 
   });
 }
 
