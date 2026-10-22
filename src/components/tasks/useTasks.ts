@@ -17,7 +17,7 @@ import {
   type CreateTaskPayload,
   type UpdateTaskPayload,
 } from './api';
-
+import { fetchAllTasks } from './api';
 
 export interface ToggleTarget {
   id: string;
@@ -125,4 +125,48 @@ export function useContactTasks(contactId: string) {
 
   const mutations = useTaskMutations();
   return { ...query, ...mutations };
+}
+
+export function useCalendarTasks() {
+  const qc = useQueryClient();
+
+  const query = useQuery({
+    queryKey: [...tasksKeys.all, 'calendar'],
+    queryFn: fetchAllTasks,
+  });
+
+  const invalidate = useCallback(
+    () => qc.invalidateQueries({ queryKey: tasksKeys.all }),
+    [qc],
+  );
+
+  const update = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: UpdateTaskPayload }) =>
+      updateTask(id, payload),
+    onSuccess: invalidate,
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const remove = useMutation({
+    mutationFn: deleteTask,
+    onSuccess: () => {
+      invalidate();
+      toast.success('Задача удалена');
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const toggleComplete = useCallback(
+    (task: ToggleTarget) => {
+      update.mutate({
+        id: task.id,
+        payload: {
+          completedAt: task.completedAt ? null : new Date().toISOString(),
+        },
+      });
+    },
+    [update.mutate],
+  );
+
+  return { ...query, update, remove, toggleComplete };
 }

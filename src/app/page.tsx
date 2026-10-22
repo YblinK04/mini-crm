@@ -1,5 +1,3 @@
-// src/app/page.tsx
-
 import type { Metadata } from 'next';
 import { LandingContent } from './(auth)/landing-content';
 

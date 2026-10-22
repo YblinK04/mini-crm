@@ -16,7 +16,6 @@ export function SidebarFooter({ collapsed }: { collapsed: boolean }) {
     setSigningOut(true);
     try {
       await signOut({ callbackUrl: '/' });
-      // При успехе произойдёт редирект — компонент размонтируется.
     } catch {
       setSigningOut(false);
       toast.error('Не удалось выйти. Попробуйте ещё раз.');

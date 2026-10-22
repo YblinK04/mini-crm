@@ -118,3 +118,14 @@ export async function deleteTask(id: string): Promise<void> {
   const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(await parseError(res));
 }
+
+export async function fetchAllTasks(): Promise<TaskJSON[]> {
+  const res = await fetch('/api/tasks?view=all');
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof body?.error === 'string' ? body.error : 'Ошибка загрузки',
+    );
+  }
+  return res.json();
+}

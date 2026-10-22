@@ -13,6 +13,8 @@ export interface IncomingMessage {
   rawPayload: unknown;
 }
 
+export type MessageChannel = ChannelName | 'WEB';
+
 export interface IncomingAttachment {
   type: 'photo' | 'document' | 'video' | 'audio';
   url?: string;

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -6,8 +5,10 @@ import { toast } from 'sonner';
 import {
   fetchDealMessages,
   sendDealMessage,
+  sendWebChatReply,
   type MessageJSON,
 } from './api';
+
 
 export const messagesKeys = {
   all: ['messages'] as const,
@@ -15,6 +16,7 @@ export const messagesKeys = {
 } as const;
 
 export const MESSAGES_QUERY_KEY = messagesKeys.all;
+
 
 function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -24,9 +26,7 @@ function errorMessage(err: unknown): string {
 
 const TEMP_ID_PREFIX = 'temp-';
 
-function isTempId(id: string): boolean {
-  return id.startsWith(TEMP_ID_PREFIX);
-}
+
 
 export function useDealMessages(dealId: string) {
   const qc = useQueryClient();
@@ -37,8 +37,8 @@ export function useDealMessages(dealId: string) {
 
     onMutate: async (text) => {
       await qc.cancelQueries({ queryKey });
-
       const previous = qc.getQueryData<MessageJSON[]>(queryKey);
+
       const tempId = `${TEMP_ID_PREFIX}${crypto.randomUUID()}`;
       const optimistic: MessageJSON = {
         id: tempId,
@@ -63,24 +63,30 @@ export function useDealMessages(dealId: string) {
     },
 
     onError: (err, _text, ctx) => {
-      if (ctx?.previous) {
-        qc.setQueryData(queryKey, ctx.previous);
-      }
+      if (ctx?.previous) qc.setQueryData(queryKey, ctx.previous);
       toast.error(errorMessage(err));
     },
 
-    onSettled: () => {
-     
+    onSettled: () => qc.invalidateQueries({ queryKey }),
+  });
+
+  const sendWebReply = useMutation({
+    mutationFn: ({ token, text }: { token: string; text: string }) =>
+      sendWebChatReply(token, text),
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey });
     },
+    onError: (err) => toast.error(errorMessage(err)),
   });
+
 
   const query = useQuery({
     queryKey,
     queryFn: () => fetchDealMessages(dealId),
     enabled: Boolean(dealId),
-    refetchInterval: send.isPending ? false : 15_000,
+    refetchInterval:
+      send.isPending || sendWebReply.isPending ? false : 15_000,
   });
 
-  return { ...query, send };
+  return { ...query, send, sendWebReply };
 }

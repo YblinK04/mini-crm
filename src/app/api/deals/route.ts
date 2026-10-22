@@ -52,7 +52,7 @@ export async function POST(request: Request): Promise<Response> {
         priority: validData.priority,
         companyId: validData.companyId,
         contactIds: validData.contactIds,
-        customFields: validData.customFields, // ← Record, без as any
+        customFields: validData.customFields, 
       },
       organizationId,
       userId,

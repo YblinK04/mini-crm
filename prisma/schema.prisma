@@ -216,6 +216,7 @@ model Deal {
   createdAt      DateTime      @default(now()) @map("created_at")
   updatedAt      DateTime      @updatedAt @map("updated_at")
   publicToken    String?       @unique @map("public_token")
+  publicTokenExpiresAt DateTime? @map("public_token_expires_at")
 
   @@map("deals")
   @@index([organizationId, pipelineId, stageId])

@@ -27,7 +27,7 @@ export const POST = auth(async (req, ctx) => {
     const existingDeal = await prisma.deal.findFirst({
       where: {
         id: dealId,
-        organizationId, // Жесткая изоляция филиалов внутри "коробки"
+        organizationId, 
       },
     });
 

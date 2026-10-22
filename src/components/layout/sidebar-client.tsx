@@ -12,6 +12,7 @@ import {
   ArrowRight,
   ChevronDown,
   Users,
+  MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -127,7 +128,7 @@ export function SidebarClient({
         <SidebarNav
           href="/today"
           icon={CalendarCheck}
-          label="Сегодня"
+          label="Планер"
           collapsed={isCurrentlyCollapsed}
         />
           <SidebarNav
@@ -136,6 +137,12 @@ export function SidebarClient({
           label="Клиенты"
           collapsed={isCurrentlyCollapsed}
         />
+           <SidebarNav
+             href="/inbox"
+             icon={MessageSquare}
+             label="Чаты"
+             collapsed={isCurrentlyCollapsed}
+     />
       </nav>
 
       <div className="flex min-h-0 flex-1 flex-col px-3 pt-6">

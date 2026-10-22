@@ -1,7 +1,7 @@
 
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { MessengerSettingsForm } from '@/components/settings/messenger/messenger-settings-form';
+import { MessengerSettingsForm } from '@/components/settings/messengers/messenger-settings-form';
 
 export const metadata = {
   title: 'Мессенджеры',

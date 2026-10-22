@@ -16,7 +16,7 @@ export function SidebarHeader({ collapsed, onToggle, hideToggle }: SidebarHeader
     <div className='flex h-14 items-center border-b px-4 shrink-0'>
       <Link href='/dashboard' className='flex items-center gap-2 font-semibold truncate'>
         <LayoutDashboard className='h-5 w-5 text-primary' />
-        {!collapsed && <span>RealTask</span>}
+        {!collapsed && <span>RealСRM</span>}
       </Link>
 
       {!hideToggle && (
