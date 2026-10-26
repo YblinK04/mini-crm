@@ -1,5 +1,3 @@
-// src/components/messages/Chat.tsx
-
 'use client';
 
 import {
@@ -63,7 +61,6 @@ export function Chat({
   webToken = null,
   hasTelegramContact = false,
 }: ChatProps) {
-  // Используем только `send`, так как роут /api/messages/send теперь универсальный
   const { data: messages = [], isLoading, send } = useDealMessages(dealId);
 
   const [text, setText] = useState('');
@@ -143,10 +140,9 @@ export function Chat({
 
     setText('');
     try {
-      // Передаем выбранный канал, чтобы бэкенд не угадывал его
       await send.mutateAsync({
         text: trimmed,
-        channel: outChannel, // 'TELEGRAM' | 'WEB'
+        channel: outChannel, 
       });
     } catch {
       setText((prev) => (prev.length > 0 ? prev : trimmed));
