@@ -5,10 +5,8 @@ import { toast } from 'sonner';
 import {
   fetchDealMessages,
   sendDealMessage,
-  sendWebChatReply,
   type MessageJSON,
 } from './api';
-
 
 export const messagesKeys = {
   all: ['messages'] as const,
@@ -16,7 +14,6 @@ export const messagesKeys = {
 } as const;
 
 export const MESSAGES_QUERY_KEY = messagesKeys.all;
-
 
 function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -26,16 +23,15 @@ function errorMessage(err: unknown): string {
 
 const TEMP_ID_PREFIX = 'temp-';
 
-
-
 export function useDealMessages(dealId: string) {
   const qc = useQueryClient();
   const queryKey = messagesKeys.byDeal(dealId);
 
   const send = useMutation({
-    mutationFn: (text: string) => sendDealMessage(dealId, text),
+    mutationFn: ({ text, channel }: { text: string; channel?: 'TELEGRAM' | 'WEB' }) => 
+      sendDealMessage(dealId, text, channel),
 
-    onMutate: async (text) => {
+    onMutate: async (variables) => {
       await qc.cancelQueries({ queryKey });
       const previous = qc.getQueryData<MessageJSON[]>(queryKey);
 
@@ -43,8 +39,8 @@ export function useDealMessages(dealId: string) {
       const optimistic: MessageJSON = {
         id: tempId,
         direction: 'OUT',
-        channel: 'TELEGRAM',
-        content: text,
+        channel: variables.channel ?? 'TELEGRAM',
+        content: variables.text,
         createdAt: new Date().toISOString(),
       };
 
@@ -56,13 +52,13 @@ export function useDealMessages(dealId: string) {
       return { previous, tempId };
     },
 
-    onSuccess: (serverMessage, _text, ctx) => {
+    onSuccess: (serverMessage, _variables, ctx) => {
       qc.setQueryData<MessageJSON[]>(queryKey, (old = []) =>
         old.map((m) => (m.id === ctx?.tempId ? serverMessage : m)),
       );
     },
 
-    onError: (err, _text, ctx) => {
+    onError: (err, _variables, ctx) => {
       if (ctx?.previous) qc.setQueryData(queryKey, ctx.previous);
       toast.error(errorMessage(err));
     },
@@ -70,23 +66,12 @@ export function useDealMessages(dealId: string) {
     onSettled: () => qc.invalidateQueries({ queryKey }),
   });
 
-  const sendWebReply = useMutation({
-    mutationFn: ({ token, text }: { token: string; text: string }) =>
-      sendWebChatReply(token, text),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey });
-    },
-    onError: (err) => toast.error(errorMessage(err)),
-  });
-
-
   const query = useQuery({
     queryKey,
     queryFn: () => fetchDealMessages(dealId),
     enabled: Boolean(dealId),
-    refetchInterval:
-      send.isPending || sendWebReply.isPending ? false : 15_000,
+    refetchInterval: send.isPending ? false : 15_000,
   });
 
-  return { ...query, send, sendWebReply };
+  return { ...query, send };
 }

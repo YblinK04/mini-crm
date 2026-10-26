@@ -1,14 +1,12 @@
-
 import type { MessageChannel } from '@/lib/channels/types';
 
 export interface MessageJSON {
   id: string;
   direction: 'IN' | 'OUT';
-  channel: MessageChannel;   
+  channel: MessageChannel;
   content: string;
   createdAt: string;
   externalChatId?: string | null;
-
 }
 
 const FETCH_TIMEOUT_MS = 15_000;
@@ -57,39 +55,14 @@ export async function fetchDealMessages(
 export async function sendDealMessage(
   dealId: string,
   text: string,
+  channel?: 'TELEGRAM' | 'WEB', 
 ): Promise<MessageJSON> {
   const res = await fetch('/api/messages/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ dealId, text }),
+    body: JSON.stringify({ dealId, text, channel }), 
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
-}
-
-export async function sendWebChatReply(
-  token: string,
-  text: string,
-): Promise<MessageJSON> {
-  const res = await fetch(
-    `/api/public/chat/${encodeURIComponent(token)}/reply`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    },
-  );
-  if (!res.ok) {
-    const raw: unknown = await res.json().catch(() => null);
-    const message =
-      raw &&
-      typeof raw === 'object' &&
-      'error' in raw &&
-      typeof (raw as { error: unknown }).error === 'string'
-        ? (raw as { error: string }).error
-        : `Ошибка ${res.status}`;
-    throw new Error(message);
-  }
   return res.json();
 }

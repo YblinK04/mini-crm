@@ -1,3 +1,5 @@
+// src/components/messages/Chat.tsx
+
 'use client';
 
 import {
@@ -61,8 +63,8 @@ export function Chat({
   webToken = null,
   hasTelegramContact = false,
 }: ChatProps) {
-  const { data: messages = [], isLoading, send, sendWebReply } =
-    useDealMessages(dealId);
+  // Используем только `send`, так как роут /api/messages/send теперь универсальный
+  const { data: messages = [], isLoading, send } = useDealMessages(dealId);
 
   const [text, setText] = useState('');
 
@@ -106,8 +108,7 @@ export function Chat({
   if (webToken) availableChannels.push('WEB');
   const showChannelPicker = availableChannels.length > 1;
 
-  const isPending = outChannel === 'WEB' ? sendWebReply.isPending : send.isPending;
-
+  const isPending = send.isPending;
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -129,7 +130,6 @@ export function Chat({
     }
   }, [lastId]);
 
-
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -137,22 +137,17 @@ export function Chat({
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }, [text]);
 
-
   const handleSend = async () => {
     const trimmed = text.trim();
-    if (!trimmed || isPending) return;
-
-    if (!outChannel) {
-      return;
-    }
+    if (!trimmed || isPending || !outChannel) return;
 
     setText('');
     try {
-      if (outChannel === 'WEB' && webToken) {
-        await sendWebReply.mutateAsync({ token: webToken, text: trimmed });
-      } else if (outChannel === 'TELEGRAM') {
-        await send.mutateAsync(trimmed);
-      }
+      // Передаем выбранный канал, чтобы бэкенд не угадывал его
+      await send.mutateAsync({
+        text: trimmed,
+        channel: outChannel, // 'TELEGRAM' | 'WEB'
+      });
     } catch {
       setText((prev) => (prev.length > 0 ? prev : trimmed));
     }
@@ -167,7 +162,6 @@ export function Chat({
 
   const canSend = Boolean(text.trim()) && Boolean(outChannel);
   const noChannelAvailable = availableChannels.length === 0;
-
 
   return (
     <div className="space-y-2">
@@ -264,7 +258,6 @@ export function Chat({
     </div>
   );
 }
-
 
 function Bubble({ message }: { message: MessageJSON }) {
   const isOut = message.direction === 'OUT';

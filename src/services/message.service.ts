@@ -1,7 +1,6 @@
-
 import { PrismaClient, Message, Prisma } from '@prisma/client';
 import { prisma as globalPrisma } from '@/lib/prisma';
-import type { ChannelName } from '@/lib/channels/types';
+import type { MessageChannel } from '@/lib/channels/types';
 
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 500;
@@ -23,7 +22,7 @@ export class MessageService {
     organizationId: string;
     contactId: string;
     dealId: string | null;
-    channel: ChannelName;
+    channel: MessageChannel;
     direction: 'IN' | 'OUT';
     externalChatId: string;
     externalMessageId: string;
@@ -59,7 +58,6 @@ export class MessageService {
       });
 
       if (!existing) {
-       
         throw new Error(
           `[message] Unique violation, but message not found: ${data.channel}/${data.externalChatId}/${data.externalMessageId}`,
         );
