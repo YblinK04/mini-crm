@@ -4,58 +4,51 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(): Promise<Response> {
   const session = await auth();
-  if (!session?.user?.id || !session.user.organizationId) {
+  if (!session?.user?.organizationId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-
-  const { organizationId } = session.user;
 
   try {
     const deals = await prisma.deal.findMany({
       where: {
-        organizationId,
-        messages: { some: {} },
+        organizationId: session.user.organizationId,
+        messages: { some: {} }, 
       },
       select: {
         id: true,
         title: true,
+        publicToken: true, 
         contacts: {
           take: 1,
-          orderBy: { createdAt: 'asc' },
-          select: { firstName: true, lastName: true },
+          select: {
+            firstName: true,
+            lastName: true,
+            telegramChatId: true, 
+          },
         },
         messages: {
-          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          orderBy: { createdAt: 'desc' },
           take: 1,
           select: {
             id: true,
             content: true,
             direction: true,
+            channel: true,
             createdAt: true,
           },
         },
       },
     });
 
-    const sortedDeals = [...deals].sort((a, b) => {
-      const aMsg = a.messages[0];
-      const bMsg = b.messages[0];
-      const aTime = aMsg?.createdAt.getTime() ?? 0;
-      const bTime = bMsg?.createdAt.getTime() ?? 0;
-      if (aTime !== bTime) return bTime - aTime;
-      return (bMsg?.id ?? '').localeCompare(aMsg?.id ?? '');
+    const sortedDeals = deals.sort((a, b) => {
+      const dateA = a.messages[0]?.createdAt.getTime() || 0;
+      const dateB = b.messages[0]?.createdAt.getTime() || 0;
+      return dateB - dateA;
     });
 
-    return NextResponse.json(sortedDeals, {
-      headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate, private',
-      },
-    });
-  } catch (error: unknown) {
-    console.error('[INBOX_GET]', { organizationId, error });
-    return NextResponse.json(
-      { error: 'Не удалось загрузить список чатов' },
-      { status: 500 },
-    );
+    return NextResponse.json(sortedDeals);
+  } catch (error) {
+    console.error('[INBOX_GET]', error);
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }

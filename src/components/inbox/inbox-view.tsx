@@ -19,29 +19,30 @@ import { Chat } from '../messages/Chat';
 interface InboxContact {
   firstName: string;
   lastName: string | null;
+  telegramChatId: string | null; 
 }
 
 interface InboxMessage {
   id: string;
   content: string;
   direction: 'IN' | 'OUT';
+  channel: string;
   createdAt: string;
 }
 
 interface InboxDeal {
   id: string;
   title: string;
+  publicToken: string | null; 
   contacts: InboxContact[];
   messages: InboxMessage[];
 }
-
 
 function formatRelativeTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   return formatDistanceToNow(d, { addSuffix: true, locale: ru });
 }
-
 
 export function InboxView() {
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
@@ -69,6 +70,7 @@ export function InboxView() {
       return failureCount < 2;
     },
   });
+
   useEffect(() => {
     if (deals.length === 0) return;
 
@@ -129,6 +131,8 @@ export function InboxView() {
     );
   }
 
+  const selectedDeal = deals.find((d) => d.id === selectedDealId);
+
   return (
     <div className="flex h-[calc(100vh-200px)] border rounded-2xl overflow-hidden bg-background">
       <div className="w-1/3 border-r flex flex-col min-w-0">
@@ -183,9 +187,15 @@ export function InboxView() {
       </div>
 
       <div className="flex-1 flex flex-col min-w-0">
-        {selectedDealId ? (
+        {selectedDealId && selectedDeal ? (
           <div className="flex-1 flex flex-col p-4 min-h-0">
-            <Chat dealId={selectedDealId} />
+            <Chat
+              dealId={selectedDealId}
+              webToken={selectedDeal.publicToken ?? null}
+              hasTelegramContact={Boolean(
+                selectedDeal.contacts?.[0]?.telegramChatId
+              )}
+            />
           </div>
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
