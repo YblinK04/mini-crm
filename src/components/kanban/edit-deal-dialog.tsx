@@ -1,5 +1,3 @@
-// src/components/deals/EditDealDialog.tsx
-
 'use client';
 
 import { useCallback } from 'react';

@@ -33,7 +33,7 @@ export class ContactService {
           telegramChatId: params.externalId,
           telegramUsername: params.username ?? null,
         },
-        update: {}, // существующий контакт не трогаем
+        update: {}, 
       });
     }
 

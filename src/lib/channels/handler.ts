@@ -1,4 +1,3 @@
-
 import { prisma } from '@/lib/prisma';
 import { getSettings } from '@/lib/settings';
 import { contactService } from '@/services/contact.service';
@@ -26,10 +25,8 @@ export async function handleIncomingMessage(
     username: msg.username,
   });
 
-  
-  const dealId = await findLatestDealId(organizationId, contact.id);
+  const dealId = await findOrCreateDealForContact(organizationId, contact.id, contact.firstName);
 
- 
   const { message, created } = await messageService.save({
     organizationId,
     contactId: contact.id,
@@ -52,11 +49,12 @@ export async function handleIncomingMessage(
   });
 }
 
-async function findLatestDealId(
+async function findOrCreateDealForContact(
   organizationId: string,
   contactId: string,
+  contactName: string,
 ): Promise<string | null> {
-  const deal = await prisma.deal.findFirst({
+  const existingDeal = await prisma.deal.findFirst({
     where: {
       organizationId,
       contacts: { some: { id: contactId } },
@@ -64,5 +62,36 @@ async function findLatestDealId(
     orderBy: { updatedAt: 'desc' },
     select: { id: true },
   });
-  return deal?.id ?? null;
+
+  if (existingDeal) {
+    return existingDeal.id;
+  }
+
+  const defaultStage = await prisma.stage.findFirst({
+    where: { pipeline: { organizationId } },
+    orderBy: { order: 'asc' }, 
+    select: { id: true, pipelineId: true },
+  });
+
+  if (!defaultStage) {
+    console.warn(
+      `[handler] Нет воронок для организации ${organizationId}. Сообщение сохранено без сделки.`,
+    );
+    return null; 
+  }
+
+  const newDeal = await prisma.deal.create({
+    data: {
+      organizationId,
+      pipelineId: defaultStage.pipelineId,
+      stageId: defaultStage.id,
+      title: contactName !== 'Без имени' ? `Заявка: ${contactName}` : 'Новая заявка из чата', 
+      contacts: { connect: { id: contactId } },
+      budget: 0,
+      priority: 'MEDIUM',
+    },
+    select: { id: true },
+  });
+
+  return newDeal.id;
 }
