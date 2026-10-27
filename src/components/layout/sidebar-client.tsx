@@ -60,6 +60,7 @@ export function SidebarClient({
     : pipelines;
 
   const toggleCollapsed = () => {
+    if (isMobile) return; 
     setCollapsed((prev) => {
       const next = !prev;
       localStorage.setItem(COLLAPSED_KEY, next ? '1' : '0');
@@ -131,18 +132,18 @@ export function SidebarClient({
           label="Планер"
           collapsed={isCurrentlyCollapsed}
         />
-          <SidebarNav
+        <SidebarNav
           href="/contacts"
           icon={Users}
           label="Клиенты"
           collapsed={isCurrentlyCollapsed}
         />
-           <SidebarNav
-             href="/inbox"
-             icon={MessageSquare}
-             label="Чаты"
-             collapsed={isCurrentlyCollapsed}
-     />
+        <SidebarNav
+          href="/inbox"
+          icon={MessageSquare}
+          label="Чаты"
+          collapsed={isCurrentlyCollapsed}
+        />
       </nav>
 
       <div className="flex min-h-0 flex-1 flex-col px-3 pt-6">

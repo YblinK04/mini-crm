@@ -6,8 +6,22 @@ import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
 import { type Deal } from '@/store/forms/useEditDealForm';
 import { EditDealDialog } from './edit-deal-dialog';
-import { Wallet, Building2, ExternalLink } from 'lucide-react';
-
+import { useDealStore } from '@/store/useDealStore';
+import { 
+  Wallet, 
+  Building2, 
+  ExternalLink, 
+  ArrowRightLeft
+} from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
 
 type DealWithRelations = Deal & {
   company?: { name: string } | null;
@@ -50,6 +64,10 @@ export const CRM_PRIORITY_CONFIG: Record<
 
 export function TaskCard({ deal, index }: TaskCardProps) {
   const [isEditOpen, setIsEditOpen] = useState(false);
+  
+  const stages = useDealStore((state) => state.stages);
+  const moveDealOptimistic = useDealStore((state) => state.moveDealOptimistic);
+  const rollbackOptimisticAction = useDealStore((state) => state.rollbackOptimisticAction);
 
   const {
     setNodeRef,
@@ -78,11 +96,39 @@ export function TaskCard({ deal, index }: TaskCardProps) {
     CRM_PRIORITY_CONFIG[deal.priority] || CRM_PRIORITY_CONFIG.MEDIUM;
 
   const companyName = deal.company?.name;
+  
+  const availableStages = stages.filter((s) => s.id !== deal.stageId);
 
   const handleCardClick = (e: MouseEvent<HTMLDivElement>) => {
     if (isDragging) return;
     e.stopPropagation();
     setIsEditOpen(true);
+  };
+
+  const handleMoveDeal = async (targetStageId: string) => {
+    moveDealOptimistic({
+      dealId: deal.id,
+      fromStageId: deal.stageId,
+      toStageId: targetStageId,
+      newOrder: 0, 
+    });
+
+    try {
+      const res = await fetch(`/api/deals/${deal.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          stageId: targetStageId,
+          order: 0 
+        }),
+      });
+
+      if (!res.ok) throw new Error('Ошибка при перемещении');
+      
+    } catch (error) {
+      console.error('Не удалось переместить сделку', error);
+      rollbackOptimisticAction();
+    }
   };
 
   return (
@@ -100,9 +146,49 @@ export function TaskCard({ deal, index }: TaskCardProps) {
             'opacity-30 border-dashed border-primary/50 shadow-none scale-95',
         )}
       >
-        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10 flex items-center gap-1 bg-muted/80 backdrop-blur-sm text-muted-foreground px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider border border-muted-foreground/10">
-          <span>Открыть</span>
-          <ExternalLink className="w-2.5 h-2.5" />
+        <div className="absolute top-3 right-3 flex items-center gap-1 z-10">
+          {availableStages.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 rounded-md bg-muted/80 backdrop-blur-sm md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+                  onClick={(e) => e.stopPropagation()} 
+                  aria-label="Переместить сделку"
+                >
+                  <ArrowRightLeft className="w-3 h-3 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                  Переместить в...
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {availableStages.map((stage) => (
+                  <DropdownMenuItem
+                    key={stage.id}
+                    className="text-xs cursor-pointer focus:bg-muted"
+                    onClick={(e) => {
+                      e.stopPropagation(); 
+                    }}
+                  >
+                    <span 
+                      className="w-2 h-2 rounded-full mr-2 shrink-0" 
+                      style={{ backgroundColor: stage.color }}
+                    />
+                    {stage.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          <div className="hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity duration-200 items-center gap-1 bg-muted/80 backdrop-blur-sm text-muted-foreground px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider border border-muted-foreground/10">
+            <span>Открыть</span>
+            <ExternalLink className="w-2.5 h-2.5" />
+          </div>
         </div>
 
         <div className="flex items-start justify-between gap-2 mb-1 pr-14">

@@ -6,7 +6,6 @@ import { type Pipeline } from '@prisma/client';
 import { Header } from '@/components/layout/header';
 import { Sidebar } from '@/components/layout/sidebar';
 
-
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
@@ -37,7 +36,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
   }));
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden text-foreground">
+    <div className="flex h-[100dvh] w-full bg-background overflow-hidden text-foreground">
       <Sidebar 
         pipelines={serializedPipelines} 
         userRole={role}

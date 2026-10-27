@@ -1,6 +1,6 @@
 'use client';
 
-import { type FormEvent, useState } from 'react';
+import { useState } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import {
   Plus,
@@ -24,16 +24,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import { EditStageDialog } from './EditStageDialog';
 
-const HEX_COLOR_REGEX = /^#([0-9A-F]{3}|[0-9A-F]{6})$/i;
 const DEFAULT_STAGE_COLOR = '#3b82f6';
 
 interface KanbanColumnProps {
@@ -43,10 +35,8 @@ interface KanbanColumnProps {
 export function KanbanColumn({ stage }: KanbanColumnProps) {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditStageOpen, setIsEditStageOpen] = useState(false);
-  const [editName, setEditName] = useState(stage.name);
-  const [editColor, setEditColor] = useState(stage.color || DEFAULT_STAGE_COLOR);
 
-  const { updateStage, deleteStage } = useStageMutations(stage.pipelineId);
+  const { deleteStage } = useStageMutations(stage.pipelineId);
 
   const { setNodeRef, isOver } = useDroppable({
     id: stage.id,
@@ -54,42 +44,6 @@ export function KanbanColumn({ stage }: KanbanColumnProps) {
   });
 
   const displayTotalBudget = (stage.totalBudget || 0) / 100;
-
-  const openEditDialog = () => {
-    setEditName(stage.name);
-    setEditColor(stage.color || DEFAULT_STAGE_COLOR);
-    setIsEditStageOpen(true);
-  };
-
-  const handleEditStageSubmit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-
-    const trimmedName = editName.trim();
-    if (!trimmedName) {
-      toast.error('Название этапа воронки не может быть пустым');
-      return;
-    }
-
-    let validatedColor = editColor.trim();
-    if (!validatedColor.startsWith('#')) {
-      validatedColor = `#${validatedColor}`;
-    }
-    if (!HEX_COLOR_REGEX.test(validatedColor)) {
-      toast.error('Некорректный HEX-цвет. Пример: #3B82F6');
-      return;
-    }
-
-    updateStage.mutate(
-      {
-        stageId: stage.id,
-        name: trimmedName,
-        color: validatedColor,
-      },
-      {
-        onSuccess: () => setIsEditStageOpen(false),
-      },
-    );
-  };
 
   const handleDeleteStage = () => {
     if (stage.deals && stage.deals.length > 0) {
@@ -113,7 +67,7 @@ export function KanbanColumn({ stage }: KanbanColumnProps) {
       <div
         ref={setNodeRef}
         className={cn(
-          'w-80 max-h-full flex flex-col bg-muted/20 border border-muted-foreground/10 rounded-2xl p-4 transition-all duration-200 shrink-0 select-none',
+          'w-[85vw] sm:w-80 max-h-full flex flex-col bg-muted/20 border border-muted-foreground/10 rounded-2xl p-4 transition-all duration-200 shrink-0 select-none',
           isOver && 'bg-muted/40 border-primary/30 ring-1 ring-primary/20 shadow-lg',
         )}
       >
@@ -137,9 +91,11 @@ export function KanbanColumn({ stage }: KanbanColumnProps) {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
+                    type="button"
                     variant="ghost"
                     size="icon"
                     className="h-6 w-6 text-muted-foreground hover:text-foreground rounded-md"
+                    aria-label="Управление этапом"
                   >
                     <MoreVertical className="w-3.5 h-3.5" />
                   </Button>
@@ -149,7 +105,7 @@ export function KanbanColumn({ stage }: KanbanColumnProps) {
                   className="w-48 border-none shadow-xl"
                 >
                   <DropdownMenuItem
-                    onClick={openEditDialog}
+                    onClick={() => setIsEditStageOpen(true)}
                     className="text-xs gap-2 cursor-pointer font-medium"
                   >
                     <Edit2 className="w-3.5 h-3.5 text-primary" />
@@ -181,7 +137,6 @@ export function KanbanColumn({ stage }: KanbanColumnProps) {
                 key={deal.id}
                 deal={deal}
                 index={idx}
-                
               />
             ))
           ) : (
@@ -214,74 +169,14 @@ export function KanbanColumn({ stage }: KanbanColumnProps) {
         onOpenChange={setIsCreateOpen}
       />
 
-      <Dialog open={isEditStageOpen} onOpenChange={setIsEditStageOpen}>
-        <DialogContent className="sm:max-w-[400px] border-none shadow-2xl bg-background text-foreground rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold tracking-tight">
-              Настройка этапа воронки
-            </DialogTitle>
-          </DialogHeader>
-
-          <form onSubmit={handleEditStageSubmit} className="space-y-4 pt-2">
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-muted-foreground/50 tracking-widest block mb-1">
-                Название колонки
-              </label>
-              <Input
-                placeholder="Название этапа"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                disabled={updateStage.isPending}
-                className="bg-muted/30 border-none focus-visible:ring-1 focus-visible:ring-primary rounded-xl h-10 text-sm"
-                maxLength={100}
-                required
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-muted-foreground/50 tracking-widest block mb-1">
-                Цвет маркера этапа
-              </label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  value={editColor}
-                  onChange={(e) => setEditColor(e.target.value)}
-                  disabled={updateStage.isPending}
-                  className="w-10 h-10 rounded-xl border border-muted-foreground/20 cursor-pointer bg-transparent overflow-hidden shrink-0"
-                />
-                <Input
-                  value={editColor.toUpperCase()}
-                  onChange={(e) => setEditColor(e.target.value)}
-                  disabled={updateStage.isPending}
-                  placeholder="#3B82F6"
-                  className="bg-muted/30 border-none uppercase font-mono max-w-[120px] rounded-xl h-10 text-sm tracking-wider"
-                  maxLength={7}
-                />
-              </div>
-            </div>
-
-            <DialogFooter className="pt-4 gap-2 sm:gap-0 border-t border-muted/20">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setIsEditStageOpen(false)}
-                disabled={updateStage.isPending}
-                className="rounded-xl text-xs font-semibold"
-              >
-                Отмена
-              </Button>
-              <Button
-                type="submit"
-                disabled={updateStage.isPending || !editName.trim()}
-                className="min-w-[120px] rounded-xl text-xs font-semibold"
-              >
-                {updateStage.isPending ? 'Сохранение...' : 'Сохранить'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <EditStageDialog
+        pipelineId={stage.pipelineId}
+        stageId={stage.id}
+        initialName={stage.name}
+        initialColor={stage.color}
+        open={isEditStageOpen}
+        onOpenChange={setIsEditStageOpen}
+      />
     </>
   );
 }

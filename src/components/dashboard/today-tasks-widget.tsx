@@ -7,6 +7,8 @@ import {
 } from '@/components/ui/card';
 import { CalendarCheck, ArrowRight, Briefcase } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { pluralize } from '@/lib/pluralize';
+import { formatTaskTime } from '@/lib/date-format';
 
 export interface DashboardTask {
   id: string;
@@ -15,7 +17,6 @@ export interface DashboardTask {
   deal: {
     id: string;
     title: string;
-    
     pipelineId?: string;
   } | null;
   isOverdue: boolean;
@@ -101,7 +102,7 @@ export function TodayTasksWidget({ tasks }: TodayTasksWidgetProps) {
                         : 'text-muted-foreground',
                     )}
                   >
-                    {formatTime(task.dueAt)}
+                    {formatTaskTime(task.dueAt)}
                   </span>
                 </Link>
               );
@@ -124,42 +125,4 @@ export function TodayTasksWidget({ tasks }: TodayTasksWidgetProps) {
       </CardContent>
     </Card>
   );
-}
-
-function pluralize(
-  n: number,
-  one: string,
-  few: string,
-  many: string,
-): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-
-  if (mod10 === 1 && mod100 !== 11) return one;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
-  return many;
-}
-
-function formatTime(dueAt: string): string {
-  const d = new Date(dueAt);
-  if (Number.isNaN(d.getTime())) return '—';
-
-  const now = new Date();
-
-  const isToday =
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate();
-
-  if (isToday) {
-    return d.toLocaleTimeString('ru-RU', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  }
-
-  return d.toLocaleDateString('ru-RU', {
-    day: 'numeric',
-    month: 'short',
-  });
 }

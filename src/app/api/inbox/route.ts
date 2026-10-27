@@ -4,14 +4,16 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(): Promise<Response> {
   const session = await auth();
-  if (!session?.user?.organizationId) {
+  if (!session?.user?.id || !session.user.organizationId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const { organizationId } = session.user;
 
   try {
     const deals = await prisma.deal.findMany({
       where: {
-        organizationId: session.user.organizationId,
+        organizationId,
         messages: { some: {} }, 
       },
       select: {
@@ -38,6 +40,7 @@ export async function GET(): Promise<Response> {
           },
         },
       },
+      take: 100, 
     });
 
     const sortedDeals = deals.sort((a, b) => {
@@ -46,9 +49,13 @@ export async function GET(): Promise<Response> {
       return dateB - dateA;
     });
 
-    return NextResponse.json(sortedDeals);
+    return NextResponse.json(sortedDeals, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+      },
+    });
   } catch (error) {
-    console.error('[INBOX_GET]', error);
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+    console.error('[INBOX_GET]', { organizationId, error });
+    return NextResponse.json({ error: 'Не удалось загрузить чаты' }, { status: 500 });
   }
 }

@@ -12,24 +12,32 @@ import {
   CommandItem, 
   CommandList 
 } from '@/components/ui/command';
-import { FileText, Folder, Search } from 'lucide-react';
+import { Briefcase, Users, Search } from 'lucide-react';
 
 interface SearchResponse {
-  projects: {
+  pipelines: {
     id: string;
     name: string;
   }[];
-  tasks: {
+  contacts: {
     id: string;
-    title: string;
-    projectId: string;
+    firstName: string;
+    lastName: string | null;
   }[];
 }
 
 export function SearchCommand() {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const router = useRouter();
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -42,10 +50,11 @@ export function SearchCommand() {
     return () => document.removeEventListener('keydown', down);
   }, []);
 
-  const { data } = useQuery<SearchResponse>({
-    queryKey: ['search', search],
-    queryFn: () => api.get(`/api/search?q=${search}`),
-    enabled: search.length > 2, 
+  const { data, isFetching } = useQuery<SearchResponse>({
+    queryKey: ['search', debouncedSearch],
+    queryFn: () => api.get(`/api/search?q=${encodeURIComponent(debouncedSearch)}`),
+    enabled: debouncedSearch.length > 2, 
+    staleTime: 1000 * 60, 
   });
 
   const runCommand = (command: () => void) => {
@@ -53,56 +62,71 @@ export function SearchCommand() {
     command();
   };
 
+  const handleOpenChange = (newOpen: boolean) => {
+    setOpen(newOpen);
+    if (!newOpen) {
+      setTimeout(() => setSearch(''), 300);
+    }
+  };
+
   return (
     <>
       <button 
+        type="button"
         onClick={() => setOpen(true)}
+        aria-label="Открыть глобальный поиск"
         className="flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground bg-muted/50 rounded-lg border hover:bg-muted transition-colors w-full max-w-[260px]"
       >
-        <Search className="w-3.5 h-3.5" />
-        <span className="flex-1 text-left">Поиск...</span>
-        <kbd className="hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-sans text-[10px] font-medium opacity-100">
+        <Search className="w-3.5 h-3.5 shrink-0" />
+        <span className="flex-1 text-left truncate">Поиск...</span>
+        <kbd className="hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-sans text-[10px] font-medium opacity-100 shrink-0">
           <span className="text-xs">⌘</span>K
         </kbd>
       </button>
 
-      <CommandDialog open={open} onOpenChange={setOpen}>
+      <CommandDialog open={open} onOpenChange={handleOpenChange}>
         <CommandInput 
-          placeholder="Найти проект или задачу..." 
+          placeholder="Найти воронку или клиента..." 
+          value={search}
           onValueChange={setSearch} 
         />
         <CommandList className="max-h-[400px]">
-          <CommandEmpty>По вашему запросу ничего не найдено.</CommandEmpty>
+          {!isFetching && (
+            <CommandEmpty>По вашему запросу ничего не найдено.</CommandEmpty>
+          )}
           
-          {data?.projects && data.projects.length > 0 && (
-            <CommandGroup heading="Проекты">
-              {data.projects.map((p) => (
+          {data?.pipelines && data.pipelines.length > 0 && (
+            <CommandGroup heading="Воронки продаж">
+              {data.pipelines.map((p) => (
                 <CommandItem 
                   key={p.id} 
                   value={p.name}
-                  onSelect={() => runCommand(() => router.push(`/projects/${p.id}`))}
+                  onSelect={() => runCommand(() => router.push(`/pipelines/${p.id}`))}
                   className="cursor-pointer"
                 >
-                  <Folder className="mr-2 h-4 w-4 opacity-70" /> 
+                  <Briefcase className="mr-2 h-4 w-4 opacity-70" /> 
                   <span>{p.name}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
           )}
 
-          {data?.tasks && data.tasks.length > 0 && (
-            <CommandGroup heading="Задачи">
-              {data.tasks.map((t) => (
-                <CommandItem 
-                  key={t.id} 
-                  value={t.title}
-                  onSelect={() => runCommand(() => router.push(`/projects/${t.projectId}`))}
-                  className="cursor-pointer"
-                >
-                  <FileText className="mr-2 h-4 w-4 opacity-70" /> 
-                  <span>{t.title}</span>
-                </CommandItem>
-              ))}
+          {data?.contacts && data.contacts.length > 0 && (
+            <CommandGroup heading="Клиенты">
+              {data.contacts.map((c) => {
+                const displayName = `${c.firstName} ${c.lastName || ''}`.trim();
+                return (
+                  <CommandItem 
+                    key={c.id} 
+                    value={displayName}
+                    onSelect={() => runCommand(() => router.push(`/contacts/${c.id}`))}
+                    className="cursor-pointer"
+                  >
+                    <Users className="mr-2 h-4 w-4 opacity-70" /> 
+                    <span>{displayName}</span>
+                  </CommandItem>
+                );
+              })}
             </CommandGroup>
           )}
         </CommandList>

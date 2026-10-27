@@ -10,16 +10,16 @@ import {
   User,
   AlertCircle,
   RefreshCw,
+  ChevronLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Chat } from '../messages/Chat';
 
-
 interface InboxContact {
   firstName: string;
   lastName: string | null;
-  telegramChatId: string | null; 
+  telegramChatId: string | null;
 }
 
 interface InboxMessage {
@@ -33,7 +33,7 @@ interface InboxMessage {
 interface InboxDeal {
   id: string;
   title: string;
-  publicToken: string | null; 
+  publicToken: string | null;
   contacts: InboxContact[];
   messages: InboxMessage[];
 }
@@ -73,10 +73,10 @@ export function InboxView() {
 
   useEffect(() => {
     if (deals.length === 0) return;
+    if (window.innerWidth < 768) return;
 
     const stillExists =
-      selectedDealId !== null &&
-      deals.some((d) => d.id === selectedDealId);
+      selectedDealId !== null && deals.some((d) => d.id === selectedDealId);
 
     if (!stillExists) {
       setSelectedDealId(deals[0].id);
@@ -85,7 +85,7 @@ export function InboxView() {
 
   if (isLoading) {
     return (
-      <div className="flex h-[calc(100vh-200px)] items-center justify-center">
+      <div className="flex h-[50vh] items-center justify-center">
         <Loader2
           className="h-6 w-6 animate-spin text-muted-foreground"
           aria-label="Загрузка диалогов"
@@ -101,7 +101,7 @@ export function InboxView() {
         : 'Не удалось загрузить диалоги.';
 
     return (
-      <div className="flex h-[calc(100vh-200px)] flex-col items-center justify-center gap-3 text-muted-foreground">
+      <div className="flex h-[50vh] flex-col items-center justify-center gap-3 text-muted-foreground">
         <AlertCircle className="h-8 w-8 text-destructive" aria-hidden="true" />
         <p className="text-sm">{message}</p>
         {error instanceof Error && error.message !== 'unauthorized' && (
@@ -121,7 +121,7 @@ export function InboxView() {
 
   if (deals.length === 0) {
     return (
-      <div className="flex h-[calc(100vh-200px)] flex-col items-center justify-center text-muted-foreground">
+      <div className="flex h-[50vh] flex-col items-center justify-center text-muted-foreground">
         <MessageSquare
           className="h-10 w-10 mb-4 opacity-20"
           aria-hidden="true"
@@ -132,10 +132,17 @@ export function InboxView() {
   }
 
   const selectedDeal = deals.find((d) => d.id === selectedDealId);
+  const isMobileChatOpen = Boolean(selectedDealId);
 
   return (
-    <div className="flex h-[calc(100vh-200px)] border rounded-2xl overflow-hidden bg-background">
-      <div className="w-1/3 border-r flex flex-col min-w-0">
+    <div className="flex h-[calc(100dvh-140px)] md:h-[calc(100vh-200px)] border rounded-none md:rounded-2xl overflow-hidden bg-background flex-col md:flex-row">
+      
+      <div 
+        className={cn(
+          "w-full md:w-1/3 border-r flex flex-col min-w-0",
+          isMobileChatOpen && "hidden md:flex"
+        )}
+      >
         <div className="p-4 border-b bg-muted/20 shrink-0">
           <h2 className="font-bold text-sm">Все диалоги</h2>
         </div>
@@ -186,16 +193,35 @@ export function InboxView() {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div 
+        className={cn(
+          "flex-1 flex flex-col min-w-0",
+          !isMobileChatOpen && "hidden md:flex"
+        )}
+      >
         {selectedDealId && selectedDeal ? (
-          <div className="flex-1 flex flex-col p-4 min-h-0">
-            <Chat
-              dealId={selectedDealId}
-              webToken={selectedDeal.publicToken ?? null}
-              hasTelegramContact={Boolean(
-                selectedDeal.contacts?.[0]?.telegramChatId
-              )}
-            />
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="md:hidden flex items-center p-2 border-b bg-muted/10 shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedDealId(null)}
+                className="-ml-2 text-muted-foreground hover:text-foreground"
+              >
+                <ChevronLeft className="h-5 w-5 mr-1" />
+                К списку чатов
+              </Button>
+            </div>
+
+            <div className="flex-1 flex flex-col p-3 md:p-4 min-h-0 overflow-hidden">
+              <Chat
+                dealId={selectedDealId}
+                webToken={selectedDeal.publicToken ?? null}
+                hasTelegramContact={Boolean(
+                  selectedDeal.contacts?.[0]?.telegramChatId
+                )}
+              />
+            </div>
           </div>
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">

@@ -3,7 +3,7 @@
 import { DragEndEvent, DragOverEvent } from '@dnd-kit/core';
 import { useCallback } from 'react';
 import { useDealStore } from './useDealStore';
-import { useMutation, useQueryClient } from '@tanstack/react-query'; 
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 interface MutationPayload {
   dealId: string;
@@ -18,13 +18,18 @@ interface QueryContext {
 
 export function useKanbanDnd(pipelineId: string) {
   const queryClient = useQueryClient();
-  
+
   const stages = useDealStore((state) => state.stages);
   const moveDealOptimistic = useDealStore((state) => state.moveDealOptimistic);
   const rollbackOptimisticAction = useDealStore((state) => state.rollbackOptimisticAction);
   const clearBackup = useDealStore((state) => state.clearBackup);
 
-  const { mutate: moveDealOnServer } = useMutation<unknown, Error, MutationPayload, QueryContext>({
+  const { mutate: moveDealOnServer } = useMutation<
+    unknown,
+    Error,
+    MutationPayload,
+    QueryContext
+  >({
     mutationKey: ['pipeline', 'move', pipelineId],
     mutationFn: async (payload) => {
       const response = await fetch(`/api/deals/${payload.dealId}`, {
@@ -37,7 +42,9 @@ export function useKanbanDnd(pipelineId: string) {
       });
 
       if (!response.ok) {
-        throw new Error(`Сервер отклонил сохранение позиции. Статус: ${response.status}`);
+        throw new Error(
+          `Сервер отклонил сохранение позиции. Статус: ${response.status}`,
+        );
       }
       return response.json();
     },
@@ -51,88 +58,91 @@ export function useKanbanDnd(pipelineId: string) {
       clearBackup();
     },
     onError: (error, payload, context) => {
-      rollbackOptimisticAction(); 
+      console.error('[KANBAN_DND_ERROR]', error);
+      rollbackOptimisticAction();
       if (context?.previousPipelineData) {
-        queryClient.setQueryData(['pipeline', pipelineId], context.previousPipelineData);
+        queryClient.setQueryData(
+          ['pipeline', pipelineId],
+          context.previousPipelineData,
+        );
       }
     },
     onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: ['pipeline', pipelineId] });
-    }
+    },
   });
 
-  const handleDragOver = useCallback((event: DragOverEvent) => {
-    const { active, over } = event;
-    if (!over) return;
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
+      const { active, over } = event;
+      if (!over) return;
 
-    const dealId = active.id as string;
-    const overId = over.id as string;
-    
-    const fromStageId = active.data.current?.stageId as string | undefined;
-    const toStageId = (over.data.current?.stageId || overId) as string;
+      const dealId = active.id as string;
+      const overId = over.id as string;
 
-    if (!fromStageId || !toStageId) return;
+      const fromStageId = active.data.current?.stageId as string | undefined;
+      const toStageId = (over.data.current?.stageId || overId) as string;
 
-    const isOverATask = Boolean(over.data.current?.stageId);
-    let newOrder = 0;
+      if (!fromStageId || !toStageId) return;
 
-    if (isOverATask) {
-      newOrder = over.data.current?.index ?? 0;
-    } else {
-      const targetStage = stages.find((s) => s.id === toStageId);
-      newOrder = targetStage ? targetStage.deals.length : 0;
-    }
+      const isOverATask = Boolean(over.data.current?.stageId);
+      let newOrder = 0;
 
-    const currentOrder = active.data.current?.index as number | undefined;
+      if (isOverATask) {
+        newOrder = over.data.current?.index ?? 0;
+      } else {
+        const targetStage = stages.find((s) => s.id === toStageId);
+        newOrder = targetStage ? targetStage.deals.length : 0;
+      }
 
-    if (fromStageId === toStageId && currentOrder === newOrder) {
-      return;
-    }
+      const currentOrder = active.data.current?.index as number | undefined;
 
-    moveDealOptimistic({ dealId, fromStageId, toStageId, newOrder });
-  }, [stages, moveDealOptimistic]);
+      if (fromStageId === toStageId && currentOrder === newOrder) {
+        return;
+      }
 
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
-    const { active, over } = event;
-    
-    if (!over) {
-      rollbackOptimisticAction();
-      return;
-    }
+      moveDealOptimistic({ dealId, fromStageId, toStageId, newOrder });
+    },
+    [stages, moveDealOptimistic],
+  );
 
-    const dealId = active.id as string;
-    const overId = over.id as string;
-    
-    const initialStageId = active.data.current?.stageId as string | undefined;
-    const initialOrder = active.data.current?.index as number | undefined;
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
 
-    const isOverATask = Boolean(over.data.current?.stageId);
-    const finalStageId = (over.data.current?.stageId || overId) as string;
-    let finalOrder = 0;
+      if (!over) {
+        rollbackOptimisticAction();
+        return;
+      }
 
-    if (isOverATask) {
-      finalOrder = over.data.current?.index ?? 0;
-    } else {
-      const targetStage = stages.find((s) => s.id === finalStageId);
-      finalOrder = targetStage ? targetStage.deals.length : 0;
-    }
+      const dealId = active.id as string;
 
-    if (!initialStageId || !finalStageId) {
-      rollbackOptimisticAction();
-      return;
-    }
+      let movedDealStageId: string | null = null;
+      let movedDealOrder: number | null = null;
 
-    if (initialStageId === finalStageId && initialOrder === finalOrder) {
-      return; 
-    }
+      for (const stage of stages) {
+        const foundDeal = stage.deals.find((d) => d.id === dealId);
+        if (foundDeal) {
+          movedDealStageId = stage.id;
+          movedDealOrder = foundDeal.order;
+          break;
+        }
+      }
 
-    moveDealOnServer({
-      dealId,    
-      newStageId: finalStageId,
-      newOrder: finalOrder,
-      pipelineId,
-    });
-  }, [stages, pipelineId, rollbackOptimisticAction, moveDealOnServer]);
+      if (movedDealStageId === null || movedDealOrder === null) {
+        rollbackOptimisticAction();
+        return;
+      }
+
+      moveDealOnServer({
+        dealId,
+        newStageId: movedDealStageId,
+        newOrder: movedDealOrder,
+        pipelineId,
+      });
+    },
+    [stages, pipelineId, rollbackOptimisticAction, moveDealOnServer],
+  );
 
   return { handleDragOver, handleDragEnd };
 }
