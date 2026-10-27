@@ -126,7 +126,7 @@ export default async function SettingsPage() {
                 variant="outline"
                 className="shrink-0"
               >
-                <a href="/api/backup" download>
+                <a href="/api/settings/backup" download>
                   <Download
                     className="h-3.5 w-3.5 mr-1.5"
                     aria-hidden="true"

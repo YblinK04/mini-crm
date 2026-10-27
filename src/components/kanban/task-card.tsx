@@ -1,18 +1,13 @@
 'use client';
 
-import { type MouseEvent, useState } from 'react';
+import { type MouseEvent, useState, useCallback } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
 import { type Deal } from '@/store/forms/useEditDealForm';
 import { EditDealDialog } from './edit-deal-dialog';
 import { useDealStore } from '@/store/useDealStore';
-import { 
-  Wallet, 
-  Building2, 
-  ExternalLink, 
-  ArrowRightLeft
-} from 'lucide-react';
+import { Wallet, Building2, ExternalLink, ArrowRightLeft } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,48 +18,22 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 
-type DealWithRelations = Deal & {
-  company?: { name: string } | null;
-};
+type DealWithRelations = Deal & { company?: { name: string } | null };
 
 interface TaskCardProps {
   deal: DealWithRelations;
   index: number;
 }
 
-export const CRM_PRIORITY_CONFIG: Record<
-  string,
-  { border: string; dot: string; text: string; label: string }
-> = {
-  URGENT: {
-    border: 'border-l-[4px] border-l-red-500 hover:border-r-red-500/10',
-    dot: 'bg-red-500 shadow-sm shadow-red-500/40',
-    text: 'text-red-500 dark:text-red-400 bg-red-500/10',
-    label: 'Критично',
-  },
-  HIGH: {
-    border: 'border-l-[4px] border-l-orange-500 hover:border-r-orange-500/10',
-    dot: 'bg-orange-500 shadow-sm shadow-orange-500/40',
-    text: 'text-orange-500 dark:text-orange-400 bg-orange-500/10',
-    label: 'Высокий',
-  },
-  MEDIUM: {
-    border: 'border-l-[4px] border-l-amber-500 hover:border-r-amber-500/10',
-    dot: 'bg-amber-500 shadow-sm shadow-amber-500/40',
-    text: 'text-amber-500 dark:text-amber-400 bg-amber-500/10',
-    label: 'Средний',
-  },
-  LOW: {
-    border: 'border-l-[4px] border-l-emerald-500 dark:border-l-emerald-600',
-    dot: 'bg-emerald-500 dark:bg-emerald-600 shadow-sm shadow-emerald-500/20',
-    text: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10',
-    label: 'Низкий',
-  },
+export const CRM_PRIORITY_CONFIG: Record<string, { border: string; dot: string; text: string; label: string }> = {
+  URGENT: { border: 'border-l-[4px] border-l-red-500 hover:border-r-red-500/10', dot: 'bg-red-500 shadow-sm shadow-red-500/40', text: 'text-red-500 dark:text-red-400 bg-red-500/10', label: 'Критично' },
+  HIGH: { border: 'border-l-[4px] border-l-orange-500 hover:border-r-orange-500/10', dot: 'bg-orange-500 shadow-sm shadow-orange-500/40', text: 'text-orange-500 dark:text-orange-400 bg-orange-500/10', label: 'Высокий' },
+  MEDIUM: { border: 'border-l-[4px] border-l-amber-500 hover:border-r-amber-500/10', dot: 'bg-amber-500 shadow-sm shadow-amber-500/40', text: 'text-amber-500 dark:text-amber-400 bg-amber-500/10', label: 'Средний' },
+  LOW: { border: 'border-l-[4px] border-l-emerald-500 dark:border-l-emerald-600', dot: 'bg-emerald-500 dark:bg-emerald-600 shadow-sm shadow-emerald-500/20', text: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10', label: 'Низкий' },
 };
 
 export function TaskCard({ deal, index }: TaskCardProps) {
   const [isEditOpen, setIsEditOpen] = useState(false);
-  
   const stages = useDealStore((state) => state.stages);
   const moveDealOptimistic = useDealStore((state) => state.moveDealOptimistic);
   const rollbackOptimisticAction = useDealStore((state) => state.rollbackOptimisticAction);
@@ -78,25 +47,13 @@ export function TaskCard({ deal, index }: TaskCardProps) {
     isDragging,
   } = useSortable({
     id: deal.id,
-    data: {
-      type: 'Deal',
-      dealId: deal.id,
-      stageId: deal.stageId,
-      index,
-    },
+    data: { type: 'Deal', dealId: deal.id, stageId: deal.stageId, index },
   });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
+  const style = { transform: CSS.Transform.toString(transform), transition };
   const displayBudget = (deal.budget || 0) / 100;
-  const currentPriority =
-    CRM_PRIORITY_CONFIG[deal.priority] || CRM_PRIORITY_CONFIG.MEDIUM;
-
+  const currentPriority = CRM_PRIORITY_CONFIG[deal.priority] || CRM_PRIORITY_CONFIG.MEDIUM;
   const companyName = deal.company?.name;
-  
   const availableStages = stages.filter((s) => s.id !== deal.stageId);
 
   const handleCardClick = (e: MouseEvent<HTMLDivElement>) => {
@@ -105,31 +62,43 @@ export function TaskCard({ deal, index }: TaskCardProps) {
     setIsEditOpen(true);
   };
 
-  const handleMoveDeal = async (targetStageId: string) => {
-    moveDealOptimistic({
-      dealId: deal.id,
-      fromStageId: deal.stageId,
-      toStageId: targetStageId,
-      newOrder: 0, 
-    });
+  const handleMoveDeal = useCallback(
+    async (targetStageId: string) => {
+      const currentStage = stages.find((s) =>
+        s.deals.some((d) => d.id === deal.id),
+      );
 
-    try {
-      const res = await fetch(`/api/deals/${deal.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          stageId: targetStageId,
-          order: 0 
-        }),
+      if (!currentStage) {
+        console.error('[MOVE_DEAL] Сделка не найдена в сторе');
+        return;
+      }
+
+      moveDealOptimistic({
+        dealId: deal.id,
+        fromStageId: currentStage.id,
+        toStageId: targetStageId,
+        newOrder: 0,
       });
 
-      if (!res.ok) throw new Error('Ошибка при перемещении');
-      
-    } catch (error) {
-      console.error('Не удалось переместить сделку', error);
-      rollbackOptimisticAction();
-    }
-  };
+      try {
+        const res = await fetch(`/api/deals/${deal.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stageId: targetStageId, order: 0 }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          console.error('[MOVE_DEAL_ERROR]', res.status, errData);
+          rollbackOptimisticAction();
+        }
+      } catch (error) {
+        console.error('[MOVE_DEAL_FETCH_ERROR]', error);
+        rollbackOptimisticAction();
+      }
+    },
+    [deal.id, stages, moveDealOptimistic, rollbackOptimisticAction],
+  );
 
   return (
     <>
@@ -142,8 +111,7 @@ export function TaskCard({ deal, index }: TaskCardProps) {
         className={cn(
           'group flex flex-col p-4 bg-background border border-muted-foreground/15 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 cursor-grab active:cursor-grabbing relative select-none',
           currentPriority.border,
-          isDragging &&
-            'opacity-30 border-dashed border-primary/50 shadow-none scale-95',
+          isDragging && 'opacity-30 border-dashed border-primary/50 shadow-none scale-95',
         )}
       >
         <div className="absolute top-3 right-3 flex items-center gap-1 z-10">
@@ -155,7 +123,7 @@ export function TaskCard({ deal, index }: TaskCardProps) {
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6 rounded-md bg-muted/80 backdrop-blur-sm md:opacity-0 md:group-hover:opacity-100 transition-opacity"
-                  onClick={(e) => e.stopPropagation()} 
+                  onClick={(e) => e.stopPropagation()}
                   aria-label="Переместить сделку"
                 >
                   <ArrowRightLeft className="w-3 h-3 text-muted-foreground" />
@@ -171,20 +139,17 @@ export function TaskCard({ deal, index }: TaskCardProps) {
                     key={stage.id}
                     className="text-xs cursor-pointer focus:bg-muted"
                     onClick={(e) => {
-                      e.stopPropagation(); 
+                      e.stopPropagation();
+                      handleMoveDeal(stage.id);
                     }}
                   >
-                    <span 
-                      className="w-2 h-2 rounded-full mr-2 shrink-0" 
-                      style={{ backgroundColor: stage.color }}
-                    />
+                    <span className="w-2 h-2 rounded-full mr-2 shrink-0" style={{ backgroundColor: stage.color }} />
                     {stage.name}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-
           <div className="hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity duration-200 items-center gap-1 bg-muted/80 backdrop-blur-sm text-muted-foreground px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider border border-muted-foreground/10">
             <span>Открыть</span>
             <ExternalLink className="w-2.5 h-2.5" />
@@ -211,29 +176,14 @@ export function TaskCard({ deal, index }: TaskCardProps) {
             <Wallet className="w-3.5 h-3.5 text-emerald-500 opacity-80 shrink-0" />
             <span>{displayBudget.toLocaleString('ru-RU')} ₽</span>
           </div>
-
-          <div
-            className={cn(
-              'flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider transition-colors',
-              currentPriority.text,
-            )}
-          >
-            <span
-              className={cn(
-                'w-1.5 h-1.5 rounded-full shrink-0 animate-pulse',
-                currentPriority.dot,
-              )}
-            />
+          <div className={cn('flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider transition-colors', currentPriority.text)}>
+            <span className={cn('w-1.5 h-1.5 rounded-full shrink-0 animate-pulse', currentPriority.dot)} />
             <span>{currentPriority.label}</span>
           </div>
         </div>
       </div>
 
-      <EditDealDialog
-        deal={deal}
-        open={isEditOpen}
-        onOpenChange={setIsEditOpen}
-      />
+      <EditDealDialog deal={deal} open={isEditOpen} onOpenChange={setIsEditOpen} />
     </>
   );
 }
