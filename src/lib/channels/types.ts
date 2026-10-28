@@ -9,6 +9,9 @@ export interface IncomingMessage {
   displayName?: string;
   username?: string;
 
+  callbackQueryId?: string; 
+  callbackData?: string;
+
   attachments?: IncomingAttachment[];
   rawPayload: unknown;
 }
@@ -31,8 +34,9 @@ export interface ChannelAdapter {
     headers: Headers,
   ): Promise<IncomingMessage | null> | IncomingMessage | null;
 
-  sendMessage(
-    externalChatId: string,
-    text: string,
-  ): Promise<{ externalId: string }>;
+ sendMessage(
+  externalChatId: string,
+  text: string,
+  options?: { replyMarkup?: Record<string, unknown> | import('./telegram/client').ReplyMarkup }
+): Promise<{ externalId: string }>;
 }

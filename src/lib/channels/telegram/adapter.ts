@@ -1,4 +1,3 @@
-
 import type { ChannelAdapter, IncomingMessage } from '../types';
 import { getSettings } from '@/lib/settings';
 import * as tg from './client';
@@ -10,15 +9,31 @@ type TgUser = {
   username?: string;
 };
 
+type TgChat = {
+  id: number;
+  type: string;
+  username?: string;
+};
+
+type TgMessage = {
+  message_id: number;
+  date: number;
+  chat: TgChat;
+  from?: TgUser;
+  text?: string;
+};
+
+type TgCallbackQuery = {
+  id: string;
+  from: TgUser;
+  message?: TgMessage;
+  data?: string;
+};
+
 type TgUpdate = {
   update_id: number;
-  message?: {
-    message_id: number;
-    date: number;
-    chat: { id: number; type: string; username?: string };
-    from?: TgUser;
-    text?: string;
-  };
+  message?: TgMessage;
+  callback_query?: TgCallbackQuery;
 };
 
 const WEBHOOK_SECRET_HEADER = 'x-telegram-bot-api-secret-token';
@@ -53,6 +68,26 @@ export class TelegramAdapter implements ChannelAdapter {
     if (!body || typeof body !== 'object') return null;
 
     const update = body as TgUpdate;
+
+    if (update.callback_query) {
+      const cb = update.callback_query;
+      const m = cb.message;
+
+      if (!m || m.chat.type !== 'private') return null;
+
+      return {
+        channel: this.channel,
+        externalChatId: String(m.chat.id),
+        externalMessageId: String(m.message_id),
+        text: cb.data ?? '', 
+        displayName: buildDisplayName(cb.from),
+        username: cb.from.username,
+        rawPayload: body,
+        callbackQueryId: cb.id,
+        callbackData: cb.data,
+      };
+    }
+
     const m = update.message;
     if (!m) return null;
     if (!m.text) return null;
@@ -72,6 +107,7 @@ export class TelegramAdapter implements ChannelAdapter {
   async sendMessage(
     externalChatId: string,
     text: string,
+    options?: { replyMarkup?: tg.ReplyMarkup }, 
   ): Promise<{ externalId: string }> {
     const settings = await getSettings();
     if (!settings?.telegramBotToken) {
@@ -82,6 +118,7 @@ export class TelegramAdapter implements ChannelAdapter {
       settings.telegramBotToken,
       externalChatId,
       text,
+      options?.replyMarkup, 
     );
 
     return { externalId: String(result.message_id) };

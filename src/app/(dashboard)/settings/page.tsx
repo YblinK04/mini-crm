@@ -11,6 +11,7 @@ import {
 import { auth } from '@/lib/auth';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { PublicLinkSettings } from '@/components/settings/PublicLinkSettings'; // <--- ДОБАВЛЕН ИМПОРТ
 
 export const metadata = {
   title: 'Настройки',
@@ -89,6 +90,10 @@ export default async function SettingsPage() {
             </Link>
           );
         })}
+      </div>
+
+      <div className="pt-2">
+        <PublicLinkSettings />
       </div>
 
       {isOwnerOrAdmin && (

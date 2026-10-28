@@ -11,19 +11,21 @@ datasource db {
 
 model Organization {
   id        String   @id @default(cuid())
-  name      String   // Название компании-клиента (например, "Барбершоп ТопГан" или "СТО АвтоЭксперт")
-  isActive  Boolean  @default(true) @map("is_active") // Возвращено для контроля лицензии/блокировки филиала
+  name      String   
+  isActive  Boolean  @default(true) @map("is_active") 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   tasks     Task[]
   users     User[]
   pipelines Pipeline[]
-  deals     Deal[]       // Добавлено для сквозной изоляции сделок по филиалам
+  deals     Deal[]       
   companies Company[]
   settings Settings? 
    messages Message[]
   contacts  Contact[]
   auditLogs AuditLog[]
+  trainingExamples TrainingExample[]
+  publicSlug String?  @unique
 
   @@map("organizations")
 }
@@ -37,7 +39,7 @@ model User {
   image          String?
   emailVerified  DateTime?
   isActive       Boolean        @default(true) @map("is_active") // Возвращено для безопасного увольнения без удаления истории
-  
+  trainingExamples  TrainingExample[]
   // Привязка к компании
   organizationId String         @map("organization_id")
   organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -46,15 +48,15 @@ model User {
   tasksAssigned   Task[] @relation("TaskAssignedTo")
   // Отношения
   notifications  Notification[]
-  assignedDeals  Deal[]         @relation("DealAssignee") // Ответственный за сделки
-  activities     ActivityLog[]  // Записи менеджера в ленте активности
-  auditLogs      AuditLog[]     // Логи действий для безопасности
+  assignedDeals  Deal[]         @relation("DealAssignee") 
+  activities     ActivityLog[]  
+  auditLogs      AuditLog[]     
   
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
   
   @@map("users")
-  @@index([organizationId, createdAt]) // Оптимизация вывода списка сотрудников
+  @@index([organizationId, createdAt]) 
 }
 
 enum Role {
@@ -67,7 +69,7 @@ enum Role {
 
 model Pipeline {
   id             String       @id @default(cuid())
-  name           String       // Например: "Стрижки", "Продажа косметики", "Ремонт ДВС"
+  name           String       
   organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   
@@ -78,12 +80,12 @@ model Pipeline {
   updatedAt      DateTime     @updatedAt @map("updated_at")
   
   @@map("pipelines")
-  @@index([organizationId, createdAt]) // Оптимизация вывода воронок филиала
+  @@index([organizationId, createdAt]) 
 }
 
 model Stage {
   id             String   @id @default(cuid())
-  name           String   // Название этапа, например: "Диагностика", "Ожидание запчастей", "Готово"
+  name           String   
   color          String   @default("#3b82f6") 
   order          Int      @default(0) // Порядок колонки на доске
   
@@ -95,14 +97,14 @@ model Stage {
   updatedAt      DateTime @updatedAt @map("updated_at")
   
   @@map("stages")
-  @@index([pipelineId, order]) // Идеально для сортировки колонок канбана
+  @@index([pipelineId, order]) 
 }
 
 
 
 model Company {
   id             String       @id @default(cuid())
-  name           String       // Название компании клиента (для B2B сделок)
+  name           String       
   organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   
@@ -132,7 +134,7 @@ model Message {
   content        String
   attachments    Json?
   rawPayload     Json?    @map("raw_payload")
-
+  trainingExamples TrainingExample[]
   createdAt      DateTime @default(now()) @map("created_at")
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -345,3 +347,39 @@ model Task {
   @@index([contactId])
   @@map("tasks")
 }
+
+enum TrainingLabel {
+  LEAD
+  SPAM
+  COMPLAINT
+  OTHER
+}
+
+model TrainingExample {
+  id             String        @id @default(cuid())
+  organizationId String        @map("organization_id")
+  text           String
+  label          TrainingLabel
+
+  sourceMessageId String? @map("source_message_id")
+  sourceMessage   Message? @relation(fields: [sourceMessageId], references: [id], onDelete: SetNull)
+
+  createdById String? @map("created_by_id")
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  isTest Boolean @default(false) @map("is_test")
+
+  tokens Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, text])
+  @@index([organizationId, label])
+  @@index([organizationId, isTest])
+  @@index([sourceMessageId])
+  @@map("training_examples")
+}
+

@@ -6,6 +6,9 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { TrainingLabel } from '@prisma/client';
 import { Send, MessageSquare, Loader2, Globe, MessageCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -48,6 +51,38 @@ export function Chat({
   } = useChatChannel(messages, hasTelegramContact, webToken);
 
   const isPending = send.isPending;
+  const labelMutation = useMutation({
+    mutationFn: async ({
+      messageId,
+      label,
+    }: {
+      messageId: string;
+      label: TrainingLabel;
+    }) => {
+      const res = await fetch(`/api/messages/${messageId}/label`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? 'Не удалось сохранить метку');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast.success('Метка сохранена — модель обновится сразу');
+    },
+    onError: (err: unknown) => {
+      const message =
+        err instanceof Error ? err.message : 'Не удалось сохранить метку';
+      toast.error(message);
+    },
+  });
+
+  const handleLabel = (messageId: string, label: TrainingLabel) => {
+    labelMutation.mutate({ messageId, label });
+  };
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -99,7 +134,6 @@ export function Chat({
 
   return (
     <div className={cn('flex flex-col w-full gap-2', className ?? 'h-[300px]')}>
-      
       <div className="flex items-center justify-between gap-2 shrink-0">
         <span className="text-[10px] font-black uppercase text-muted-foreground/50 tracking-widest">
           Чат {messages.length > 0 && `(${messages.length})`}
@@ -110,7 +144,7 @@ export function Chat({
             value={outChannel ?? ''}
             onValueChange={(v) => setOutChannel(v as OutChannel)}
           >
-            <SelectTrigger 
+            <SelectTrigger
               className="h-7 w-auto gap-1 text-[11px] rounded-md px-2"
               aria-label="Выбор канала для ответа"
             >
@@ -158,7 +192,13 @@ export function Chat({
             </span>
           </div>
         ) : (
-          messages.map((m) => <MessageBubble key={m.id} message={m} />)
+          messages.map((m) => (
+            <MessageBubble
+              key={m.id}
+              message={m}
+              onLabel={handleLabel}
+            />
+          ))
         )}
       </div>
 
