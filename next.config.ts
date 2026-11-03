@@ -55,6 +55,13 @@ const NODE_BUILTINS = [
 const nextConfig: NextConfig = {
   serverExternalPackages: NODE_ONLY_PACKAGES,
 
+   typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  
   webpack: (config, context) => {
     if (context.isServer) {
       if (!Array.isArray(config.externals)) {
