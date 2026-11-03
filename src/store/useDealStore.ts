@@ -1,4 +1,3 @@
-// src/store/useDealStore.ts
 'use client';
 
 import { create } from 'zustand';
@@ -15,20 +14,14 @@ interface DealStoreState {
   error: string | null;
   backupStages: KanbanStage[] | null;
 
-  /**
-   * Сделка, открытая в диалоге редактирования.
-   * null — диалог закрыт. Управляется openDealForEdit / closeDealEdit.
-   */
   editingDeal: KanbanDeal | null;
 
   setPipelineData: (data: PipelineDataDTO) => void;
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
 
-  /** Открыть диалог редактирования указанной сделки. */
   openDealForEdit: (deal: KanbanDeal) => void;
 
-  /** Закрыть диалог редактирования. */
   closeDealEdit: () => void;
 
   moveDealOptimistic: (payload: {
@@ -45,7 +38,6 @@ interface DealStoreState {
   ) => void;
   deleteDealOptimistic: (stageId: string, dealId: string) => void;
 
-  // 🔥 КРИТИЧЕСКОЕ ДОБАВЛЕНИЕ: метод для синхронизации ID после ответа сервера
   updateDealIdInState: (temporaryId: string, serverId: string) => void;
 
   rollbackOptimisticAction: () => void;

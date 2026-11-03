@@ -26,7 +26,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Некорректный JSON тела запроса' }, { status: 400 });
     }
 
-    const { action, name, color, stageId } = body;
+    const { action, name, color, stageId, autoTaskTitle, autoTaskDays } = body;
 
     if (action === 'UPDATE_STAGE') {
       if (!stageId) {
@@ -34,7 +34,8 @@ export async function PATCH(
       }
       const updatedStage = await pipelineService.updateStage(
         String(stageId), 
-        { name, color }, 
+        { name, color,  autoTaskTitle: autoTaskTitle ?? null,
+          autoTaskDays: autoTaskDays ?? null, }, 
         organizationId
       );
       return NextResponse.json(updatedStage, { status: 200 });

@@ -13,7 +13,6 @@ const DUMMY_HASH =
 const nodeAuthConfig = {
   ...authConfig,
 
-  // ← ДОБАВЛЕНО: доверяем хосту (on-prem, один инстанс, не SaaS)
   trustHost: true,
 
   providers: [

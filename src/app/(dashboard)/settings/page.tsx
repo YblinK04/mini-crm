@@ -6,12 +6,13 @@ import {
   ChevronRight,
   Download,
   Database,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import { auth } from '@/lib/auth';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PublicLinkSettings } from '@/components/settings/PublicLinkSettings'; // <--- ДОБАВЛЕН ИМПОРТ
+import { PublicLinkSettings } from '@/components/settings/PublicLinkSettings';
 
 export const metadata = {
   title: 'Настройки',
@@ -22,6 +23,7 @@ interface SettingsSection {
   icon: LucideIcon;
   title: string;
   description: string;
+  requiresOwnerOrAdmin?: boolean;
 }
 
 const SECTIONS: SettingsSection[] = [
@@ -37,6 +39,13 @@ const SECTIONS: SettingsSection[] = [
     title: 'Мессенджеры',
     description: 'Telegram, MAX, интеграции',
   },
+  {
+    href: '/settings/automation',
+    icon: Zap,
+    title: 'Автоматизация',
+    description: 'Автоответы и другие автоматические действия',
+    requiresOwnerOrAdmin: true,
+  },
 ];
 
 export default async function SettingsPage() {
@@ -49,6 +58,10 @@ export default async function SettingsPage() {
     session.user.role ?? '',
   );
 
+  const visibleSections = SECTIONS.filter(
+    (section) => !section.requiresOwnerOrAdmin || isOwnerOrAdmin,
+  );
+
   return (
     <div className="container max-w-2xl py-8 space-y-6">
       <div className="space-y-1">
@@ -59,7 +72,7 @@ export default async function SettingsPage() {
       </div>
 
       <div className="space-y-2">
-        {SECTIONS.map((section) => {
+        {visibleSections.map((section) => {
           const Icon = section.icon;
 
           return (

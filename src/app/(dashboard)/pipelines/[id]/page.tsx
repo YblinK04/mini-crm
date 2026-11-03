@@ -60,6 +60,8 @@ export default async function PipelinesPage({
         order: stage.order,
         pipelineId: stage.pipelineId,
         totalBudget: stage.totalBudget,
+        autoTaskTitle: stage.autoTaskTitle,   
+        autoTaskDays: stage.autoTaskDays, 
         deals: stage.deals.map((deal) => ({
           id: deal.id,
           title: deal.title,
@@ -73,6 +75,7 @@ export default async function PipelinesPage({
           assigneeId: deal.assigneeId,
           companyId: deal.companyId,
           organizationId: deal.organizationId,
+           
 
           customFields: deal.customFields,
 

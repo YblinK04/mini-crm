@@ -87,10 +87,12 @@ export const PATCH = auth(async (req, ctx) => {
     }
 
     const data = parsedBody.data;
+
     const existingDeal = await prisma.deal.findFirst({
       where: { id: dealId, organizationId },
-      select: { id: true, pipelineId: true },
+      select: { id: true, pipelineId: true, stageId: true },
     });
+    
     if (!existingDeal) {
       return NextResponse.json(
         { error: "Сделка не найдена в вашей организации" },
@@ -160,6 +162,32 @@ export const PATCH = auth(async (req, ctx) => {
         },
       },
     });
+
+    const stageChanged =
+      data.stageId !== undefined && data.stageId !== existingDeal.stageId;
+
+    if (stageChanged) {
+      try {
+        const { events } = await import('@/lib/events');
+        await events.emit('deal.stageChanged', {
+          deal: {
+            id: updatedDeal.id,
+            title: updatedDeal.title,
+            stageId: updatedDeal.stageId,
+            organizationId: updatedDeal.organizationId,
+          },
+          oldStageId: existingDeal.stageId,
+          newStageId: data.stageId,
+          organizationId,
+          userId,
+        });
+        console.log(
+          `📢 [EVENT] deal.stageChanged: ${existingDeal.stageId} → ${data.stageId}`,
+        );
+      } catch (emitError) {
+        console.error('[EVENT_EMIT_ERROR]', emitError);
+      }
+    }
 
     return NextResponse.json({ success: true, data: updatedDeal });
   } catch (error: unknown) {

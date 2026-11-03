@@ -9,6 +9,7 @@ export interface ChatMessage {
 export interface ChatData {
   organization: { name: string };
   title: string;
+  contactName?: string | null;
   messages: ChatMessage[];
 }
 

@@ -22,6 +22,8 @@ export async function GET(): Promise<Response> {
         firstName: true,
         lastName: true,
         telegramUsername: true,
+        phone: true,
+        email: true,
       },
     });
     return NextResponse.json(contacts);

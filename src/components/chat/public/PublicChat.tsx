@@ -8,6 +8,7 @@ import { isChatMessage, groupByDay } from './utils';
 import { ChatHeader } from './ChatHeader';
 import { ChatError, ChatLoading, ChatEmpty } from './ChatStates';
 import { DayDivider, MessageBubble } from './MessageBubble';
+import { WelcomeNameForm } from './WelcomeNameForm'; // <--- ДОБАВЛЕН ИМПОРТ
 
 export function PublicChat({ token }: { token: string }) {
   const {
@@ -24,6 +25,24 @@ export function PublicChat({ token }: { token: string }) {
   }
 
   const safeMessages = data.messages.filter(isChatMessage);
+
+  const needsName =
+    safeMessages.length === 0 &&
+    (!data.contactName ||
+      data.contactName === 'Клиент из чата' ||
+      data.contactName.startsWith('Клиент PWA'));
+
+  if (needsName) {
+    return (
+      <WelcomeNameForm
+        token={token}
+        onSuccess={() => {
+          refetch(); 
+        }}
+      />
+    );
+  }
+
   const groups = groupByDay(safeMessages);
 
   return (
@@ -69,7 +88,7 @@ export function PublicChat({ token }: { token: string }) {
                 handleSend();
               }
             }}
-            placeholder="Напишите сообщение..."
+            placeholder={`Напишите сообщение${data.contactName ? `, ${data.contactName}` : ''}...`} // <-- Приятный бонус: подставляем имя в плейсхолдер
             aria-label="Текст сообщения"
             className="min-h-[44px] max-h-[120px] resize-none text-[15px] rounded-xl bg-zinc-100 dark:bg-zinc-900 border-transparent dark:border-zinc-800 focus-visible:ring-1 focus-visible:ring-blue-500 px-4 py-3 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-500"
             rows={1}

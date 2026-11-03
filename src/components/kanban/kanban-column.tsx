@@ -163,6 +163,8 @@ export function KanbanColumn({ stage }: KanbanColumnProps) {
         initialColor={stage.color}
         open={isEditStageOpen}
         onOpenChange={setIsEditStageOpen}
+        initialAutoTaskTitle={stage.autoTaskTitle}
+        initialAutoTaskDays={stage.autoTaskDays}
       />
     </>
   );

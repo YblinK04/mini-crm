@@ -7,17 +7,20 @@ import { rateLimiter } from '@/lib/rate-limiter';
 import { events } from '@/lib/events';
 
 const LeadSchema = z.object({
-  slug: z
-    .string()
-    .min(1)
-    .max(64)
-    .regex(/^[a-z0-9-]+$/, 'Некорректный slug'),
+  slug: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/i),
   name: z.string().trim().min(1, 'Имя обязательно').max(100),
+  phone: z.string().trim().max(50).optional().nullable(),
+  email: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? null : v),
+    z.string().trim().email('Некорректный email').max(255).nullable().optional(),
+  ),
   message: z.string().trim().min(1, 'Сообщение обязательно').max(4000),
+  consent: z.boolean().refine((v) => v === true, {
+    message: 'Необходимо согласие на обработку данных',
+  }),
 });
 
 export async function POST(request: Request): Promise<Response> {
- 
   const ip =
     request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
     request.headers.get('x-real-ip') ??
@@ -35,6 +38,10 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const body = await request.json().catch(() => null);
+  if (!body) {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
   const parsed = LeadSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
@@ -43,7 +50,7 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const { slug, name, message } = parsed.data;
+  const { slug, name, phone, email, message } = parsed.data;
 
   try {
     const org = await prisma.organization.findUnique({
@@ -72,14 +79,18 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const publicToken = randomBytes(32).toString('base64url');
+
     const result = await prisma.$transaction(async (tx) => {
       const contact = await tx.contact.create({
         data: {
           organizationId: org.id,
           firstName: name,
-          
+          phone: phone || null,
+          email: email || null,
           telegramUsername: `web:${publicToken}`,
+          
         },
+        select: { id: true, firstName: true },
       });
 
       const deal = await tx.deal.create({
@@ -108,12 +119,14 @@ export async function POST(request: Request): Promise<Response> {
           rawPayload: {
             ip,
             userAgent: request.headers.get('user-agent') ?? null,
+            source: 'public-lead-form',
           },
         },
       });
 
       return { deal, contact, firstMessage };
     });
+
     void events
       .emit('message.received', {
         message: result.firstMessage,

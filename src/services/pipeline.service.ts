@@ -50,6 +50,8 @@ type DealDTO = Omit<PrismaDealRow, 'budget' | 'customFields'> & {
 type StageDTO = Stage & {
   totalBudget: number;
   deals: DealDTO[];
+  autoTaskTitle: string | null;
+  autoTaskDays: number | null;
 };
 
 export interface PipelineDataDTO
@@ -295,7 +297,8 @@ export class PipelineService {
 
   async updateStage(
     stageId: string,
-    data: { name?: string; color?: string },
+    data: { name?: string; color?: string, autoTaskTitle?: string | null;
+    autoTaskDays?: number | null; },
     organizationId: string,
     txContext?: PrismaTransactionContext,
   ): Promise<Stage> {
@@ -333,7 +336,8 @@ export class PipelineService {
       where: { id: stageId },
       data: {
         name: updatedName,
-        color: data.color?.trim() || undefined,
+        color: data.color?.trim() || undefined, autoTaskTitle: data.autoTaskTitle !== undefined ? data.autoTaskTitle : undefined,
+    autoTaskDays: data.autoTaskDays !== undefined ? data.autoTaskDays : undefined,
       },
     });
   }

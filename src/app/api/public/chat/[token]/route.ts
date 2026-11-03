@@ -1,27 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-
-const WINDOW_MS = 60_000;
-const MAX_PER_WINDOW = 30;
-const recentRequests = new Map<string, { count: number; resetAt: number }>();
-
-function rateLimit(ip: string): boolean {
-  const now = Date.now();
-  const entry = recentRequests.get(ip);
-
-  if (!entry || entry.resetAt < now) {
-    recentRequests.set(ip, { count: 1, resetAt: now + WINDOW_MS });
-    if (recentRequests.size > 10_000) {
-      for (const [k, v] of recentRequests) {
-        if (v.resetAt < now) recentRequests.delete(k);
-      }
-    }
-    return true;
-  }
-  if (entry.count >= MAX_PER_WINDOW) return false;
-  entry.count++;
-  return true;
-}
+import { rateLimiter } from '@/lib/rate-limiter';
 
 const MAX_MESSAGES = 200;
 
@@ -34,7 +13,7 @@ export async function GET(
     request.headers.get('x-real-ip') ??
     'unknown';
 
-  if (!rateLimit(ip)) {
+  if (rateLimiter.check(`public-chat:${ip}`, 30, 60_000).limited) {
     return NextResponse.json(
       { error: 'Слишком много запросов. Попробуйте позже.' },
       { status: 429 },
@@ -50,7 +29,12 @@ export async function GET(
         id: true,
         title: true,
         publicTokenExpiresAt: true,
-        organization: { select: { name: true } },
+        organization: { select: { name: true, isActive: true } },
+        contacts: {
+          where: { telegramUsername: `web:${token}` },
+          take: 1,
+          select: { firstName: true },
+        },
       },
     });
 
@@ -58,7 +42,17 @@ export async function GET(
       return NextResponse.json({ error: 'Чат не найден' }, { status: 404 });
     }
 
-    if (deal.publicTokenExpiresAt && deal.publicTokenExpiresAt < new Date()) {
+    if (!deal.organization.isActive) {
+      return NextResponse.json(
+        { error: 'Организация недоступна' },
+        { status: 403 },
+      );
+    }
+
+    if (
+      deal.publicTokenExpiresAt &&
+      deal.publicTokenExpiresAt < new Date()
+    ) {
       return NextResponse.json(
         { error: 'Срок действия ссылки истёк' },
         { status: 410 },
@@ -86,6 +80,7 @@ export async function GET(
         id: deal.id,
         title: deal.title,
         organization: deal.organization,
+        contactName: deal.contacts[0]?.firstName ?? null,
         messages: rows.reverse(),
       },
       {

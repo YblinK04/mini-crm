@@ -5,7 +5,7 @@ import { useDealStore } from '@/store/useDealStore';
 import { toast } from 'sonner';
 
 export interface CreateStagePayload { name: string; color?: string; }
-export interface UpdateStagePayload { stageId: string; name: string; color: string; }
+export interface UpdateStagePayload { stageId: string; name: string; color: string;autoTaskTitle?: string | null; autoTaskDays?: number | null; }
 
 export function useStageMutations(pipelineId: string) {
   const queryClient = useQueryClient();
@@ -45,7 +45,12 @@ export function useStageMutations(pipelineId: string) {
       const response = await fetch(`/api/pipelines/${pipelineId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'UPDATE_STAGE', stageId: data.stageId, name: data.name.trim(), color: data.color }),
+        body: JSON.stringify({ action: 'UPDATE_STAGE', 
+        stageId: data.stageId, 
+        name: data.name.trim(), 
+        color: data.color,
+        autoTaskTitle: data.autoTaskTitle ?? null,  
+        autoTaskDays: data.autoTaskDays ?? null, }),
       });
 
       if (!response.ok) {

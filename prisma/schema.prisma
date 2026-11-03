@@ -96,6 +96,8 @@ model Stage {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
   
+  autoTaskDays  Int?    @map("auto_task_days")   
+  autoTaskTitle String? @map("auto_task_title")
   @@map("stages")
   @@index([pipelineId, order]) 
 }
@@ -173,6 +175,7 @@ model Contact {
   messages       Message[]  
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
+  autoReplySentAt DateTime? @map("auto_reply_sent_at")
 
   @@unique([organizationId, telegramChatId])
   @@unique([organizationId, maxUserId])
@@ -206,7 +209,6 @@ model Deal {
   assigneeId     String?       @map("assignee_id")
   assignee       User?         @relation("DealAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   
-  // Привязка к клиентам
   companyId      String?       @map("company_id")
   company        Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
   contacts       Contact[]     @relation("DealContacts")
@@ -220,8 +222,10 @@ model Deal {
   publicToken    String?       @unique @map("public_token")
   publicTokenExpiresAt DateTime? @map("public_token_expires_at")
 
+  archivedAt     DateTime? @map("archived_at")
+
   @@map("deals")
-  @@index([organizationId, pipelineId, stageId])
+  @@index([organizationId, pipelineId, stageId, archivedAt])
   @@index([assigneeId])
   @@index([companyId])
 }
@@ -278,6 +282,8 @@ model Settings {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  autoReplyEnabled Boolean @default(false) @map("auto_reply_enabled")
+  autoReplyText    String? @map("auto_reply_text") @db.VarChar(4000)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@map("settings")

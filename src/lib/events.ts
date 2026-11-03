@@ -1,4 +1,3 @@
-
 type Handler<T = unknown> = (payload: T) => void | Promise<void>;
 
 class EventBus {
@@ -27,10 +26,15 @@ class EventBus {
 
   async emit<T = unknown>(event: string, payload: T): Promise<void> {
     const set = this.handlers.get(event);
-    if (!set || set.size === 0) return;
+    
+    if (!set || set.size === 0) {
+      console.warn(`⚠️ [EVENT] "${event}" emitted, но НЕТ подписчиков`);
+      return;
+    }
+
+    console.log(`📡 [EVENT] "${event}" → ${set.size} подписчик(ов)`);
 
     const snapshot = Array.from(set);
-
     for (const handler of snapshot) {
       try {
         await handler(payload);
@@ -41,4 +45,12 @@ class EventBus {
   }
 }
 
-export const events = new EventBus();
+const globalForEvents = globalThis as unknown as {
+  __eventBus?: EventBus;
+};
+
+export const events = globalForEvents.__eventBus ?? new EventBus();
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForEvents.__eventBus = events;
+}
