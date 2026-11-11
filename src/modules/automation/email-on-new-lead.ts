@@ -14,6 +14,7 @@ interface MessageReceivedPayload {
 declare global {
   var __emailOnNewLeadRegistered: boolean | undefined;
 }
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -22,6 +23,7 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
 function sanitizeHeader(s: string): string {
   return s.replace(/[\r\n]/g, ' ').slice(0, 200);
 }
@@ -35,13 +37,41 @@ export function registerEmailOnNewLead() {
   events.on<MessageReceivedPayload>(
     'message.received',
     async ({ message, contact }) => {
+      console.log('[email-on-new-lead] HANDLER FIRED', {
+        messageId: message.id,
+        direction: message.direction,
+        channel: message.channel,
+        contactId: contact.id,
+      });
+
       try {
-        if (message.direction !== 'IN') return;
+        if (message.direction !== 'IN') {
+          console.log(
+            '[email-on-new-lead] skip: direction !== IN',
+            message.direction,
+          );
+          return;
+        }
 
         const settings = await getSettings();
-        if (!settings?.emailNotificationsEnabled) return;
-        if (!settings.notifyOnNewLead) return;
-        if (!settings.ownerEmail) return;
+        if (!settings) {
+          console.log('[email-on-new-lead] skip: settings = null');
+          return;
+        }
+        if (!settings.emailNotificationsEnabled) {
+          console.log(
+            '[email-on-new-lead] skip: emailNotificationsEnabled = false',
+          );
+          return;
+        }
+        if (!settings.notifyOnNewLead) {
+          console.log('[email-on-new-lead] skip: notifyOnNewLead = false');
+          return;
+        }
+        if (!settings.ownerEmail) {
+          console.log('[email-on-new-lead] skip: ownerEmail пустой');
+          return;
+        }
 
         const previousCount = await prisma.message.count({
           where: {
@@ -50,7 +80,19 @@ export function registerEmailOnNewLead() {
             id: { not: message.id },
           },
         });
-        if (previousCount > 0) return;
+        if (previousCount > 0) {
+          console.log(
+            '[email-on-new-lead] skip: previousCount =',
+            previousCount,
+            '(у контакта уже есть IN-сообщения)',
+          );
+          return;
+        }
+
+        console.log(
+          '[email-on-new-lead] отпра��ляем на',
+          settings.ownerEmail,
+        );
 
         const publicUrl = process.env.PUBLIC_URL;
         if (!publicUrl) {
@@ -100,12 +142,17 @@ export function registerEmailOnNewLead() {
           </div>
         `;
 
-        await sendEmail({
+        const sent = await sendEmail({
           to: settings.ownerEmail,
           subject,
           html,
           text: `Новая заявка от ${contact.firstName}. Открыть: ${inboxUrl}`,
         });
+
+        console.log(
+          '[email-on-new-lead] sendEmail result =',
+          sent,
+        );
       } catch (error) {
         console.error('[email-on-new-lead] Ошибка:', error);
       }
