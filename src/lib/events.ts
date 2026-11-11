@@ -27,6 +27,12 @@ class EventBus {
 
   async emit<T = unknown>(event: string, payload: T): Promise<void> {
     const set = this.handlers.get(event);
+
+    // ── ДИАГНОСТИКА: пока не уберём — оставь этот лог ──
+    console.log(
+      `[EventBus] emit "${event}", handlers: ${set?.size ?? 0}`,
+    );
+
     if (!set || set.size === 0) return;
 
     const snapshot = Array.from(set);
@@ -35,10 +41,22 @@ class EventBus {
       try {
         await handler(payload);
       } catch (error) {
-        console.error(`[eventbus] handler for "${event}" failed:`, error);
+        console.error(
+          `[eventbus] handler for "${event}" failed:`,
+          error,
+        );
       }
     }
   }
 }
 
-export const events = new EventBus();
+
+declare global {
+  var __eventBus: EventBus | undefined;
+}
+
+export const events = globalThis.__eventBus ?? new EventBus();
+
+if (!globalThis.__eventBus) {
+  globalThis.__eventBus = events;
+}
