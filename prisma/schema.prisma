@@ -75,7 +75,7 @@ model Pipeline {
   
   stages         Stage[]
   deals          Deal[]
-
+  isInbox        Boolean      @default(false) @map("is_inbox") 
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
   
@@ -286,6 +286,23 @@ model Settings {
   autoReplyText    String? @map("auto_reply_text") @db.VarChar(4000)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
+  smtpHost      String?  @map("smtp_host")
+  smtpPort      Int?     @map("smtp_port")
+  smtpSecure    Boolean  @default(true)  @map("smtp_secure")
+  smtpUser      String?  @map("smtp_user")
+  smtpPassword  String?  @map("smtp_password")
+  smtpFrom      String?  @map("smtp_from")
+
+  smtpLastTestedAt  DateTime? @map("smtp_last_tested_at")
+  smtpLastTestOk    Boolean?  @map("smtp_last_test_ok")
+  smtpLastTestError String?   @map("smtp_last_test_error") @db.VarChar(500)
+
+  emailNotificationsEnabled Boolean @default(false) @map("email_notifications_enabled")
+  notifyOnNewLead           Boolean @default(true)  @map("notify_on_new_lead")
+  notifyDailyDigest         Boolean @default(true)  @map("notify_daily_digest")
+  ownerEmail                String? @map("owner_email")
+
+  emailDigestLastSentAt DateTime? @map("email_digest_last_sent_at")
   @@map("settings")
 }
 

@@ -13,7 +13,7 @@ const DEFAULT_MAX = 15;
 const DEFAULT_WINDOW_MS = 60_000;
 const MAX_ENTRIES = 50_000;
 
-class RateLimiter {
+export class RateLimiter {
   private store = new Map<string, RateLimitEntry>();
 
   public check(

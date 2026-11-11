@@ -82,7 +82,7 @@ export const PATCH = auth(async (req, ctx) => {
     if (!parsedBody.success) {
       return NextResponse.json({
         error: "Некорректный формат переданных данных",
-        details: parsedBody.error.flatten()
+        details: parsedBody.error.flatten(),
       }, { status: 400 });
     }
 
@@ -90,9 +90,9 @@ export const PATCH = auth(async (req, ctx) => {
 
     const existingDeal = await prisma.deal.findFirst({
       where: { id: dealId, organizationId },
-      select: { id: true, pipelineId: true, stageId: true },
+      select: { id: true, stageId: true },
     });
-    
+
     if (!existingDeal) {
       return NextResponse.json(
         { error: "Сделка не найдена в вашей организации" },
@@ -100,31 +100,44 @@ export const PATCH = auth(async (req, ctx) => {
       );
     }
 
-    if (data.stageId) {
-      const stage = await prisma.stage.findFirst({
-        where: {
-          id: data.stageId,
-          pipelineId: existingDeal.pipelineId,
+    let resolvedPipelineId: string | undefined;
+    if (data.stageId !== undefined) {
+      const stage = await prisma.stage.findUnique({
+        where: { id: data.stageId },
+        select: {
+          id: true,
+          pipelineId: true,
+          pipeline: { select: { organizationId: true } },
         },
-        select: { id: true },
       });
+
       if (!stage) {
         return NextResponse.json(
-          { error: "Этап не найден в пайплайне этой сделки" },
+          { error: "Этап не найден" },
           { status: 400 },
         );
       }
+
+      if (stage.pipeline.organizationId !== organizationId) {
+        return NextResponse.json(
+          { error: "Этот этап принадлежит другой организации" },
+          { status: 403 },
+        );
+      }
+
+      resolvedPipelineId = stage.pipelineId;
     }
 
     if (data.contactIds && data.contactIds.length > 0) {
+      const uniqueContactIds = Array.from(new Set(data.contactIds));
       const owned = await prisma.contact.findMany({
         where: {
-          id: { in: data.contactIds },
+          id: { in: uniqueContactIds },
           organizationId,
         },
         select: { id: true },
       });
-      if (owned.length !== data.contactIds.length) {
+      if (owned.length !== uniqueContactIds.length) {
         return NextResponse.json(
           { error: "Некоторые контакты не найдены в вашей организации" },
           { status: 400 },
@@ -134,6 +147,7 @@ export const PATCH = auth(async (req, ctx) => {
 
     const updateData = {
       ...(data.stageId !== undefined && { stageId: data.stageId }),
+      ...(resolvedPipelineId !== undefined && { pipelineId: resolvedPipelineId }),
       ...(data.order !== undefined && { order: data.order }),
       ...(data.title !== undefined && { title: data.title }),
       ...(data.description !== undefined && { description: data.description }),
@@ -143,7 +157,10 @@ export const PATCH = auth(async (req, ctx) => {
     };
 
     if (Object.keys(updateData).length === 0 && data.contactIds === undefined) {
-      return NextResponse.json({ error: "Отсутствуют поля для обновления" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Отсутствуют поля для обновления" },
+        { status: 400 },
+      );
     }
 
     const updatedDeal = await prisma.deal.update({
@@ -200,7 +217,10 @@ export const PATCH = auth(async (req, ctx) => {
       );
     }
 
-    return NextResponse.json({ error: "Не удалось обновить данные сделки" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Не удалось обновить данные сделки" },
+      { status: 500 },
+    );
   }
 });
 

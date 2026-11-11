@@ -137,18 +137,19 @@ export function CreateDealDialog({
                 <FormItem>
                   <ThemeLabel text="Первоначальный бюджет (₽)" />
                   <FormControl>
-                    <Input
+                   <Input
                       type="number"
                       step="any"
+                      min="0"
                       placeholder="0"
                       disabled={isPending}
                       className="bg-muted/30 border-none focus-visible:ring-1 focus-visible:ring-primary rounded-xl h-10 text-sm font-semibold tracking-tight"
-                      value={field.value}
+                      value={field.value === 0 || field.value === null ? '' : field.value}
                       onChange={(e) => {
-                        const val = e.target.value;
-                        field.onChange(val === '' ? 0 : Number(val));
-                      }}
-                    />
+                      const val = e.target.value;
+                      field.onChange(val === '' ? '' : Number(val));
+                              }}
+                        />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

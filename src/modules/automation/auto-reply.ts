@@ -16,6 +16,8 @@ const g = globalThis as typeof globalThis & {
   __autoReplyRegistered?: boolean;
 };
 
+const PLACEHOLDER_NAMES = new Set(['Без имени', 'Клиент из чата']);
+
 export function registerAutoReply() {
   if (g.__autoReplyRegistered) return;
   g.__autoReplyRegistered = true;
@@ -43,7 +45,7 @@ export function registerAutoReply() {
         if (claim.count === 0) return;
 
         const name =
-          contact.firstName && contact.firstName !== 'Без имени'
+          contact.firstName && !PLACEHOLDER_NAMES.has(contact.firstName)
             ? contact.firstName
             : null;
 
@@ -54,22 +56,37 @@ export function registerAutoReply() {
         ).trim();
 
         if (!text) {
-          await prisma.contact.update({
-            where: { id: contact.id },
-            data: { autoReplySentAt: null },
-          }).catch(() => {});
+          await prisma.contact
+            .update({
+              where: { id: contact.id },
+              data: { autoReplySentAt: null },
+            })
+            .catch(() => {});
           return;
         }
+
+        const releaseClaim = async () => {
+          await prisma.contact
+            .update({
+              where: { id: contact.id },
+              data: { autoReplySentAt: null },
+            })
+            .catch(() => {});
+        };
 
         try {
           switch (message.channel) {
             case 'TELEGRAM': {
               if (!contact.telegramChatId) {
-                console.warn('[auto-reply] No telegramChatId, skipping');
-                break;
+                console.warn('[auto-reply] No telegramChatId, releasing claim');
+                await releaseClaim();
+                return;
               }
               const adapter = getAdapter('TELEGRAM');
-              const result = await adapter.sendMessage(contact.telegramChatId, text);
+              const result = await adapter.sendMessage(
+                contact.telegramChatId,
+                text,
+              );
               await prisma.message.create({
                 data: {
                   organizationId,
@@ -102,17 +119,14 @@ export function registerAutoReply() {
               break;
             }
             default:
-              console.warn('[auto-reply] Unsupported channel:', message.channel);
-              await prisma.contact.update({
-                where: { id: contact.id },
-                data: { autoReplySentAt: null },
-              }).catch(() => {});
+              console.warn(
+                '[auto-reply] Unsupported channel:',
+                message.channel,
+              );
+              await releaseClaim();
           }
         } catch (sendError) {
-          await prisma.contact.update({
-            where: { id: contact.id },
-            data: { autoReplySentAt: null },
-          }).catch(() => {});
+          await releaseClaim();
           throw sendError;
         }
       } catch (error) {

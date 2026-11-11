@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { events } from '@/lib/events';
 
 const SendSchema = z.object({
   text: z.string().trim().min(1, 'Сообщение не может быть пустым').max(4000),
@@ -127,7 +128,7 @@ export async function POST(
       });
     }
 
-    const message = await prisma.message.create({
+  const message = await prisma.message.create({
   data: {
     organizationId: deal.organizationId,
     contactId,
@@ -142,13 +143,23 @@ export async function POST(
       userAgent: request.headers.get('user-agent') ?? null,
     },
   },
-  select: {
-    id: true,
-    direction: true,
-    content: true,
-    createdAt: true,
-  },
+  select: { id: true, direction: true, content: true, createdAt: true },
 });
+
+ const fullMessage = await prisma.message.findUniqueOrThrow({
+  where: { id: message.id },
+});
+
+const contact = await prisma.contact.findUniqueOrThrow({
+  where: { id: contactId },
+});
+
+void events.emit('message.received', {
+  message: fullMessage,
+  contact,
+  dealId: deal.id,
+  organizationId: deal.organizationId,
+}).catch((e) => console.error('[PUBLIC_CHAT_EMIT_ERROR]', e));
 
 return NextResponse.json(message, {
   status: 201,

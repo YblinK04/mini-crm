@@ -1,15 +1,20 @@
-import { registerStageChangedTask } from './stage-changed-task';
-
 import { registerAutoReply } from './auto-reply';
+import { registerAutoTaskOnStage } from './auto-task-on-stage';
+import { registerEmailOnNewLead } from './email-on-new-lead';
+import { registerEmailDailyDigest } from './email-daily-digest';
 
-let isRegistered = false;
+declare global {
+  var __automationRegistered: boolean | undefined;
+}
 
 export function registerAutomationModules() {
-  if (isRegistered) return;
-  isRegistered = true;
+  if (globalThis.__automationRegistered) return;
+  globalThis.__automationRegistered = true;
 
   registerAutoReply();
-  registerStageChangedTask(); 
-  
+  registerAutoTaskOnStage();
+  registerEmailOnNewLead();
+  registerEmailDailyDigest();
+
   console.log('✅ [AUTOMATION] Модули автоматизации зарегистрированы');
 }

@@ -1,10 +1,12 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useQuery } from '@tanstack/react-query';
+
 import {
   Plus,
   CalendarCheck,
@@ -13,6 +15,7 @@ import {
   ChevronDown,
   Users,
   MessageSquare,
+  Inbox,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -26,12 +29,14 @@ import { CreatePipelineDialog } from '../projects/create-pipeline-dialog';
 
 const SIDEBAR_PIPELINES_LIMIT = 5;
 const COLLAPSED_KEY = 'sidebar:collapsed';
+const PIPELINES_SECTION_ID = 'sidebar-pipelines-section';
 
 interface SidebarClientProps {
   pipelines: {
     id: string;
     name: string;
     organizationId: string;
+    isInbox: boolean;
     createdAt: string;
     updatedAt: string;
   }[];
@@ -44,15 +49,29 @@ export function SidebarClient({
   userRole,
   isMobile = false,
 }: SidebarClientProps) {
-  const [collapsed, setCollapsed] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem(COLLAPSED_KEY) === '1';
-  });
+  const [collapsed, setCollapsed] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [pipelinesOpen, setPipelinesOpen] = useState(true);
 
+  useEffect(() => {
+    if (localStorage.getItem(COLLAPSED_KEY) === '1') {
+      setCollapsed(true);
+    }
+  }, []);
+
   const pathname = usePathname();
   const isCurrentlyCollapsed = isMobile ? false : collapsed;
+
+  const { data: inboxCount = 0 } = useQuery<number>({
+    queryKey: ['inbox-pipeline-count'],
+    queryFn: async () => {
+      const res = await fetch('/api/inbox-pipeline/count');
+      if (!res.ok) return 0;
+      const data = await res.json();
+      return data.count ?? 0;
+    },
+    refetchInterval: 30_000,
+  });
 
   const hasOverflow = pipelines.length > SIDEBAR_PIPELINES_LIMIT;
   const visiblePipelines = hasOverflow
@@ -60,7 +79,7 @@ export function SidebarClient({
     : pipelines;
 
   const toggleCollapsed = () => {
-    if (isMobile) return; 
+    if (isMobile) return;
     setCollapsed((prev) => {
       const next = !prev;
       localStorage.setItem(COLLAPSED_KEY, next ? '1' : '0');
@@ -127,6 +146,13 @@ export function SidebarClient({
           collapsed={isCurrentlyCollapsed}
         />
         <SidebarNav
+          href="/inbox-pipeline"
+          icon={Inbox}
+          label="Входящие"
+          collapsed={isCurrentlyCollapsed}
+          badge={inboxCount}
+        />
+        <SidebarNav
           href="/today"
           icon={CalendarCheck}
           label="Планер"
@@ -154,6 +180,7 @@ export function SidebarClient({
               onClick={() => setPipelinesOpen((v) => !v)}
               className="group flex flex-1 items-center gap-1.5 text-left"
               aria-expanded={pipelinesOpen}
+              aria-controls={PIPELINES_SECTION_ID}
             >
               <ChevronDown
                 className={cn(
@@ -173,7 +200,7 @@ export function SidebarClient({
               onClick={() => setCreateDialogOpen(true)}
               aria-label="Создать воронку"
             >
-              <Plus className="h-3 w-3" />
+              <Plus className="h-3 w-3" aria-hidden="true" />
             </Button>
           </div>
         ) : (
@@ -185,13 +212,16 @@ export function SidebarClient({
               onClick={() => setCreateDialogOpen(true)}
               aria-label="Создать воронку"
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             </Button>
           </div>
         )}
 
         {pipelinesOpen && (
-          <div className="flex min-h-0 flex-1 flex-col">
+          <div
+            id={PIPELINES_SECTION_ID}
+            className="flex min-h-0 flex-1 flex-col"
+          >
             <ScrollArea className="min-h-0 flex-1">
               <div className="max-h-[260px]">
                 <SidebarSection
@@ -208,7 +238,7 @@ export function SidebarClient({
                 href="/pipelines"
                 className="mt-1 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-medium text-muted-foreground/60 transition-colors hover:bg-muted/50 hover:text-foreground"
               >
-                <ArrowRight className="h-3 w-3" />
+                <ArrowRight className="h-3 w-3" aria-hidden="true" />
                 <span>Все воронки ({pipelines.length})</span>
               </Link>
             )}

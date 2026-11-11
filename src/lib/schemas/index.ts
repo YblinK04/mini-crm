@@ -95,6 +95,20 @@ export const CreateCompanySchema = z.object({
   name: z.string().trim().min(1, 'Название компании обязательно').max(100),
 });
 
+ export const LeadSchema = z.object({
+  slug: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/i),
+  name: z.string().trim().min(1, 'Имя обязательно').max(100),
+  phone: z.string().trim().max(50).optional().nullable(),
+  email: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? null : v),
+    z.string().trim().email('Некорректный email').max(255).nullable().optional(),
+  ),
+  message: z.string().trim().min(1, 'Сообщение обязательно').max(4000),
+  consent: z.boolean().refine((v) => v === true, {
+    message: 'Необходимо согласие на обработку данных',
+  }),
+});
+
 export const ContactSchema = z.object({
   id: z.string().cuid(),
   firstName: z.string().trim().min(1, 'Имя обязательно для заполнения').max(50),
@@ -273,6 +287,23 @@ export const UpdateTaskSchema = z
     { message: 'Укажите хотя бы одно поле для обновления' },
   );
 
+  export const UpdateEmailSettingsSchema = z.object({
+  smtpHost: z.string().trim().max(255).optional(),
+  smtpPort: z.number().int().positive().max(65535).optional(),
+  smtpSecure: z.boolean().optional(),
+  smtpUser: z.string().trim().max(255).optional(),
+  smtpPassword: z.string().max(500).optional(),
+  smtpFrom: z.string().trim().max(255).optional(),
+  emailNotificationsEnabled: z.boolean().optional(),
+  notifyOnNewLead: z.boolean().optional(),
+  notifyDailyDigest: z.boolean().optional(),
+  ownerEmail: z.string().trim().email().max(255).optional().or(z.literal('')),
+});
+
+export const EmailTestActionSchema = z.object({
+  action: z.enum(['test-connection', 'send-test']),
+});
+
 
 export type User = z.infer<typeof UserSchema>;
 export type CreateUserInput = z.infer<typeof CreatedUserSchema>;
@@ -288,6 +319,7 @@ export type CreateCompanyInput = z.infer<typeof CreateCompanySchema>;
 export type Contact = z.infer<typeof ContactSchema>;
 export type CreateContactInput = z.infer<typeof CreateContactSchema>;
 export type UpdateContactInput = z.infer<typeof ContactSchema>;
+export type LeadInput = z.infer<typeof LeadSchema>;
 
 export type Deal = z.infer<typeof DealSchema>;
 export type UpdateDealInput = z.infer<typeof UpdateDealSchema>;
@@ -301,3 +333,5 @@ export type CreateDealApiInput = z.infer<typeof CreateDealApiSchema>;
 export type TaskDTO = z.infer<typeof TaskSchema>;
 export type CreateTaskInput = z.infer<typeof CreateTaskSchema>;
 export type UpdateTaskInput = z.infer<typeof UpdateTaskSchema>;
+export type UpdateEmailSettingsInput = z.infer<typeof UpdateEmailSettingsSchema>;
+export type EmailTestActionInput = z.infer<typeof EmailTestActionSchema>;

@@ -1,24 +1,12 @@
-
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
 import { randomBytes, randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { rateLimiter } from '@/lib/rate-limiter';
 import { events } from '@/lib/events';
+import { getOrCreateInboxPipeline } from '@/lib/inbox-pipeline';
+import { LeadSchema } from '@/lib/schemas';
 
-const LeadSchema = z.object({
-  slug: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/i),
-  name: z.string().trim().min(1, 'Имя обязательно').max(100),
-  phone: z.string().trim().max(50).optional().nullable(),
-  email: z.preprocess(
-    (v) => (typeof v === 'string' && v.trim() === '' ? null : v),
-    z.string().trim().email('Некорректный email').max(255).nullable().optional(),
-  ),
-  message: z.string().trim().min(1, 'Сообщение обязательно').max(4000),
-  consent: z.boolean().refine((v) => v === true, {
-    message: 'Необходимо согласие на обработку данных',
-  }),
-});
+
 
 export async function POST(request: Request): Promise<Response> {
   const ip =
@@ -65,13 +53,10 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const defaultStage = await prisma.stage.findFirst({
-      where: { pipeline: { organizationId: org.id } },
-      orderBy: [{ pipeline: { createdAt: 'asc' } }, { order: 'asc' }],
-      select: { id: true, pipelineId: true },
-    });
+    const inbox = await getOrCreateInboxPipeline(org.id);
+    const firstStage = inbox.stages[0];
 
-    if (!defaultStage) {
+    if (!firstStage) {
       return NextResponse.json(
         { error: 'Воронки не настроены' },
         { status: 400 },
@@ -88,7 +73,6 @@ export async function POST(request: Request): Promise<Response> {
           phone: phone || null,
           email: email || null,
           telegramUsername: `web:${publicToken}`,
-          
         },
         select: { id: true, firstName: true },
       });
@@ -96,8 +80,8 @@ export async function POST(request: Request): Promise<Response> {
       const deal = await tx.deal.create({
         data: {
           organizationId: org.id,
-          pipelineId: defaultStage.pipelineId,
-          stageId: defaultStage.id,
+          pipelineId: inbox.id,
+          stageId: firstStage.id,
           title: `Заявка с сайта: ${name}`,
           budget: 0,
           priority: 'MEDIUM',

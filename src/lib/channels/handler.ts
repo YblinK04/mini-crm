@@ -8,6 +8,7 @@ import { rateLimiter } from '@/lib/rate-limiter';
 import { NaiveBayesClassifier } from '@/lib/classifier';
 import { seedDefaultExamples } from '@/lib/classifier/seed-runner';
 import { getAdapter } from './registry';
+import { getOrCreateInboxPipeline } from '@/lib/inbox-pipeline';
 import type { IncomingMessage } from './types';
 
 interface CachedClassifier {
@@ -16,13 +17,16 @@ interface CachedClassifier {
   examplesCount: number;
 }
 
-const CLASSIFIER_TTL_MS = 60 * 60 * 1000; 
+const CLASSIFIER_TTL_MS = 60 * 60 * 1000;
 const classifierCache = new Map<string, CachedClassifier>();
+
 export function invalidateClassifier(organizationId: string): void {
   classifierCache.delete(organizationId);
 }
 
-async function getClassifier(organizationId: string): Promise<NaiveBayesClassifier> {
+async function getClassifier(
+  organizationId: string,
+): Promise<NaiveBayesClassifier> {
   const cached = classifierCache.get(organizationId);
   const now = Date.now();
 
@@ -55,6 +59,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
   }
 
   const { organizationId } = settings;
+
   if (msg.callbackQueryId) {
     if (settings.telegramBotToken && msg.channel === 'TELEGRAM') {
       try {
@@ -70,13 +75,19 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     console.log(`[callback] ${msg.callbackData} от ${msg.externalChatId}`);
     return;
   }
+
   const rateLimitKey = `${msg.channel}:${msg.externalChatId}`;
   const rateStatus = rateLimiter.check(rateLimitKey, 15, 60_000);
   if (rateStatus.limited) {
-    console.warn(`[rate-limit] Флуд от ${rateLimitKey}, retry after ${rateStatus.retryAfterSec}s`);
+    console.warn(
+      `[rate-limit] Флуд от ${rateLimitKey}, retry after ${rateStatus.retryAfterSec}s`,
+    );
     return;
   }
-  const examplesCount = await prisma.trainingExample.count({ where: { organizationId } });
+
+  const examplesCount = await prisma.trainingExample.count({
+    where: { organizationId },
+  });
   if (examplesCount === 0) {
     void seedDefaultExamples(organizationId).catch((e) =>
       console.error('[handler] seed failed:', e),
@@ -85,15 +96,18 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
 
   const classifier = await getClassifier(organizationId);
   const prediction = classifier.predict(msg.text);
+
   if (prediction.confidence >= 0.3) {
     console.log(
       `[bayes] "${msg.text.slice(0, 50)}..." -> ${prediction.label} (${(prediction.confidence * 100).toFixed(0)}%)`,
     );
   }
+
   if (prediction.label === 'SPAM' && prediction.confidence > 0.6) {
     console.log(`[bayes] Спам отсечён: ${msg.externalChatId}`);
     return;
   }
+
   const contact = await contactService.findOrCreateByExternalId({
     organizationId,
     channel: msg.channel,
@@ -101,11 +115,13 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     displayName: msg.displayName,
     username: msg.username,
   });
+
   const dealId = await findOrCreateDealForContact(
     organizationId,
     contact.id,
     contact.firstName,
   );
+
   const { message, created } = await messageService.save({
     organizationId,
     contactId: contact.id,
@@ -119,15 +135,15 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
   });
 
   if (!created) return;
+
   if (dealId && settings.telegramBotToken && msg.channel === 'TELEGRAM') {
     void sendWelcomeButton({
       botToken: settings.telegramBotToken,
       chatId: msg.externalChatId,
       dealId,
-    }).catch((e) =>
-      console.error('[handler] welcome button failed:', e),
-    );
+    }).catch((e) => console.error('[handler] welcome button failed:', e));
   }
+
   await events.emit('message.received', {
     message,
     contact,
@@ -154,14 +170,16 @@ async function sendWelcomeButton(params: {
     select: { publicToken: true },
   });
 
-  let publicToken = deal?.publicToken;
-  if (!publicToken) {
-    publicToken = randomBytes(32).toString('base64url');
-    await prisma.deal.update({
-      where: { id: dealId },
-      data: { publicToken },
-    });
-  }
+  if (deal?.publicToken) return;
+
+  const publicToken = randomBytes(32).toString('base64url');
+
+  const claimed = await prisma.deal.updateMany({
+    where: { id: dealId, publicToken: null },
+    data: { publicToken },
+  });
+
+  if (claimed.count === 0) return;
 
   const webUrl = `${publicUrl.replace(/\/+$/, '')}/chat/${publicToken}`;
 
@@ -177,52 +195,74 @@ async function sendWelcomeButton(params: {
   );
 }
 
+
+const DEAL_LOCK = new Map<string, Promise<string | null>>();
+
+async function findOrCreateDealForContactInner(
+  organizationId: string,
+  contactId: string,
+  contactName: string,
+): Promise<string | null> {
+  const existing = await prisma.deal.findFirst({
+    where: {
+      organizationId,
+      contacts: { some: { id: contactId } },
+    },
+    orderBy: { updatedAt: 'desc' },
+    select: { id: true },
+  });
+
+  if (existing) return existing.id;
+
+  const inbox = await getOrCreateInboxPipeline(organizationId);
+  const firstStage = inbox.stages[0];
+
+  if (!firstStage) {
+    console.warn(
+      `[handler] Нет этапов в "Входящих" для организации ${organizationId}`,
+    );
+    return null;
+  }
+
+  const title =
+    contactName && contactName !== 'Без имени'
+      ? `Заявка: ${contactName}`
+      : 'Новая заявка из чата';
+
+  const newDeal = await prisma.deal.create({
+    data: {
+      organizationId,
+      pipelineId: inbox.id,
+      stageId: firstStage.id,
+      title,
+      contacts: { connect: { id: contactId } },
+      budget: 0,
+      priority: 'MEDIUM',
+    },
+    select: { id: true },
+  });
+
+  console.log(`📥 [INBOX] Новая сделка ${newDeal.id} создана в "Входящих"`);
+  return newDeal.id;
+}
+
 async function findOrCreateDealForContact(
   organizationId: string,
   contactId: string,
   contactName: string,
 ): Promise<string | null> {
-  return await prisma.$transaction(async (tx) => {
-    const existing = await tx.deal.findFirst({
-      where: {
-        organizationId,
-        contacts: { some: { id: contactId } },
-      },
-      orderBy: { updatedAt: 'desc' },
-      select: { id: true },
-    });
+  const lockKey = `${organizationId}:${contactId}`;
+  const inflight = DEAL_LOCK.get(lockKey);
+  if (inflight) return inflight;
 
-    if (existing) return existing.id;
-
-    const defaultStage = await tx.stage.findFirst({
-      where: { pipeline: { organizationId } },
-      orderBy: [{ pipeline: { createdAt: 'asc' } }, { order: 'asc' }],
-      select: { id: true, pipelineId: true },
-    });
-
-    if (!defaultStage) {
-      console.warn(`[handler] Нет воронок для организации ${organizationId}`);
-      return null;
-    }
-
-    const title =
-      contactName && contactName !== 'Без имени'
-        ? `Заявка: ${contactName}`
-        : 'Новая заявка из чата';
-
-    const newDeal = await tx.deal.create({
-      data: {
-        organizationId,
-        pipelineId: defaultStage.pipelineId,
-        stageId: defaultStage.id,
-        title,
-        contacts: { connect: { id: contactId } },
-        budget: 0,
-        priority: 'MEDIUM',
-      },
-      select: { id: true },
-    });
-
-    return newDeal.id;
+  const promise = findOrCreateDealForContactInner(
+    organizationId,
+    contactId,
+    contactName,
+  ).finally(() => {
+    DEAL_LOCK.delete(lockKey);
   });
+
+  DEAL_LOCK.set(lockKey, promise);
+  return promise;
 }

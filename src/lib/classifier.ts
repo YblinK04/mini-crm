@@ -33,29 +33,32 @@ export class NaiveBayesClassifier {
     this.vocabulary = new Set();
   }
 
-  public train(data: TrainingData[]): void {
-    for (const item of data) {
-      const label = item.label;
-      const tokens = tokenize(item.text);
+  private addExample(text: string, label: TrainingLabel): void {
+    const tokens = tokenize(text);
 
-      this.totalDocs++;
-      this.classCounts[label] = (this.classCounts[label] || 0) + 1;
+    this.totalDocs++;
+    this.classCounts[label] = (this.classCounts[label] || 0) + 1;
 
-      if (!this.wordCounts[label]) {
-        this.wordCounts[label] = Object.create(null);
-        this.wordsPerClass[label] = 0;
-      }
+    if (!this.wordCounts[label]) {
+      this.wordCounts[label] = Object.create(null);
+      this.wordsPerClass[label] = 0;
+    }
 
-      for (const token of tokens) {
-        this.vocabulary.add(token);
-        this.wordCounts[label][token] = (this.wordCounts[label][token] || 0) + 1;
-        this.wordsPerClass[label]++;
-      }
+    for (const token of tokens) {
+      this.vocabulary.add(token);
+      this.wordCounts[label][token] = (this.wordCounts[label][token] || 0) + 1;
+      this.wordsPerClass[label]++;
     }
   }
 
+  public train(data: TrainingData[]): void {
+    this.reset();
+    for (const item of data) {
+      this.addExample(item.text, item.label);
+    }
+  }
   public trainOne(text: string, label: TrainingLabel): void {
-    this.train([{ text, label }]);
+    this.addExample(text, label);
   }
 
   public predict(text: string): PredictionResult {

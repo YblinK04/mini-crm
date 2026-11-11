@@ -67,7 +67,6 @@ export function Header({ user }: HeaderProps) {
         </Button>
 
         <div className="w-full max-w-md min-w-0">
-          <SearchCommand />
         </div>
       </div>
 

@@ -7,6 +7,7 @@ import {
   Download,
   Database,
   Zap,
+  Mail,
   type LucideIcon,
 } from 'lucide-react';
 import { auth } from '@/lib/auth';
@@ -46,6 +47,13 @@ const SECTIONS: SettingsSection[] = [
     description: 'Автоответы и другие автоматические действия',
     requiresOwnerOrAdmin: true,
   },
+  {
+    href: '/settings/email',
+    icon: Mail,
+    title: 'Email-уведомления',
+    description: 'SMTP-сервер, уведомления о заявках, дайджест',
+    requiresOwnerOrAdmin: true,
+  },
 ];
 
 export default async function SettingsPage() {
@@ -63,7 +71,7 @@ export default async function SettingsPage() {
   );
 
   return (
-    <div className="container max-w-2xl py-8 space-y-6">
+    <div className="container max-w-2xl px-4 sm:px-6 py-8 space-y-6">
       <div className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight">Настройки</h1>
         <p className="text-sm text-muted-foreground">
