@@ -85,6 +85,23 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     return;
   }
 
+  if (msg.channel === 'TELEGRAM') {
+    const existingContact = await prisma.contact.findFirst({
+      where: {
+        organizationId,
+        telegramChatId: msg.externalChatId,
+      },
+      select: { blockedAt: true },
+    });
+
+    if (existingContact?.blockedAt) {
+      console.log(
+        `🚫 [BLOCKED] Игнорируем сообщение от заблокированного ${msg.externalChatId}`,
+      );
+      return;
+    }
+  }
+
   const examplesCount = await prisma.trainingExample.count({
     where: { organizationId },
   });
@@ -151,7 +168,6 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     organizationId,
   });
 }
-
 async function sendWelcomeButton(params: {
   botToken: string;
   chatId: string;

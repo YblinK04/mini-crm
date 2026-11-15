@@ -75,7 +75,7 @@ export default async function PipelinesPage({
           assigneeId: deal.assigneeId,
           companyId: deal.companyId,
           organizationId: deal.organizationId,
-           
+          chatClosedAt: deal.chatClosedAt, 
 
           customFields: deal.customFields,
 
@@ -93,6 +93,7 @@ export default async function PipelinesPage({
             id: c.id,
             firstName: c.firstName,
             phone: c.phone,
+            blockedAt: c.blockedAt, 
           })),
         })),
       })),

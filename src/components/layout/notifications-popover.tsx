@@ -24,7 +24,8 @@ export function NotificationsPopover() {
   const { data: notifications = [] } = useQuery<Notification[]>({
     queryKey: ['notifications'],
     queryFn: () => api.get('/api/notifications'),
-    refetchInterval: 30000, 
+    refetchInterval: 5000,
+    refetchOnWindowFocus: true, 
   });
 
   const { mutate: markAllAsRead, isPending } = useMutation({

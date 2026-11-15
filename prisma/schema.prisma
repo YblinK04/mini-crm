@@ -176,6 +176,8 @@ model Contact {
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
   autoReplySentAt DateTime? @map("auto_reply_sent_at")
+  blockedAt       DateTime? @map("blocked_at")
+
 
   @@unique([organizationId, telegramChatId])
   @@unique([organizationId, maxUserId])
@@ -221,6 +223,7 @@ model Deal {
   updatedAt      DateTime      @updatedAt @map("updated_at")
   publicToken    String?       @unique @map("public_token")
   publicTokenExpiresAt DateTime? @map("public_token_expires_at")
+  chatClosedAt   DateTime?     @map("chat_closed_at")
 
   archivedAt     DateTime? @map("archived_at")
 

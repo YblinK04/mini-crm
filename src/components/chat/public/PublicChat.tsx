@@ -1,114 +1,168 @@
 'use client';
 
-import { Loader2, Send } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import { useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  AlertCircle,
+  ShieldOff,
+  MessageCircleOff,
+  Clock,
+} from 'lucide-react';
 import { usePublicChat } from './usePublicChat';
-import { isChatMessage, groupByDay } from './utils';
 import { ChatHeader } from './ChatHeader';
-import { ChatError, ChatLoading, ChatEmpty } from './ChatStates';
 import { DayDivider, MessageBubble } from './MessageBubble';
-import { WelcomeNameForm } from './WelcomeNameForm'; // <--- ДОБАВЛЕН ИМПОРТ
+import { WelcomeNameForm } from './WelcomeNameForm';
+import { ChatComposer } from '@/components/chat/shared/ChatComposer';
+import { ChatLoading, ChatError, ChatEmpty } from './ChatStates';
+import { groupByDay } from './utils';
 
-export function PublicChat({ token }: { token: string }) {
+interface PublicChatProps {
+  token: string;
+}
+
+export function PublicChat({ token }: PublicChatProps) {
+  const queryClient = useQueryClient();
   const {
-    data, isLoading, isError, error, refetch, send, text, setText, handleSend, scrollRef, textareaRef, handleScroll,
+    data,
+    isLoading,
+    isError,
+    refetch,
+    activeData,
+    isActive,
+    send,
+    scrollRef,
+    handleScroll,
   } = usePublicChat(token);
 
-  if (isLoading) return <ChatLoading />;
+  const messages = activeData?.messages ?? [];
+  const groups = useMemo(() => groupByDay(messages), [messages]);
 
-  if (isError || !data) {
-    const reason = error instanceof Error ? error.message : '';
-    return (
-      <ChatError isNotFound={reason === 'not_found'} onRetry={() => refetch()} />
-    );
+  const handleSend = async (content: string): Promise<unknown> => {
+    if (!isActive) return null;
+    const trimmed = content.trim();
+    if (!trimmed) return null;
+    try {
+      return await send.mutateAsync(trimmed);
+    } catch {
+      return null;
+    }
+  };
+
+  const handleNameSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ['public-chat', token] });
+  };
+
+  if (isError) {
+    return <ChatError isNotFound={false} onRetry={() => refetch()} />;
   }
 
-  const safeMessages = data.messages.filter(isChatMessage);
+  if (isLoading || !data) {
+    return <ChatLoading />;
+  }
 
-  const needsName =
-    safeMessages.length === 0 &&
-    (!data.contactName ||
-      data.contactName === 'Клиент из чата' ||
-      data.contactName.startsWith('Клиент PWA'));
-
-  if (needsName) {
+  if (data.status === 'not_found') {
     return (
-      <WelcomeNameForm
-        token={token}
-        onSuccess={() => {
-          refetch(); 
-        }}
+      <StatusScreen
+        icon={<AlertCircle className="h-10 w-10 text-destructive/50" />}
+        title="Чат не найден"
+        text="Возможно, ссылка устарела или была удалена. Попросите менеджера создать новую."
       />
     );
   }
 
-  const groups = groupByDay(safeMessages);
+  if (data.status === 'blocked') {
+    return (
+      <StatusScreen
+        icon={<ShieldOff className="h-10 w-10 text-destructive/50" />}
+        title="Диалог заблокирован"
+        text={`Компания «${data.organizationName || ''}» закрыла доступ к этому чату.`}
+      />
+    );
+  }
+
+  if (data.status === 'closed') {
+    return (
+      <StatusScreen
+        icon={
+          <MessageCircleOff className="h-10 w-10 text-muted-foreground/40" />
+        }
+        title="Чат закрыт"
+        text="Менеджер завершил этот диалог. Если нужна помощь — свяжитесь с компанией напрямую."
+      />
+    );
+  }
+
+  if (data.status === 'expired') {
+    return (
+      <StatusScreen
+        icon={<Clock className="h-10 w-10 text-muted-foreground/40" />}
+        title="Ссылка устарела"
+        text="Ссылка на этот чат больше не активна."
+      />
+    );
+  }
+
+  if (!activeData) return <ChatLoading />;
+
+  const hasMessages = activeData.messages.length > 0;
+  const needsName =
+    !activeData.contactName || activeData.contactName === 'Клиент из чата';
 
   return (
-    <div className="flex flex-col h-full w-full bg-white dark:bg-zinc-950 text-foreground transition-colors duration-300">
-      <ChatHeader organizationName={data.organization?.name ?? 'Чат'} />
+    <div className="flex flex-col h-full bg-background">
+      <ChatHeader organizationName={activeData.organization.name} />
 
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-6 bg-zinc-50 dark:bg-zinc-900 scrollbar-thin"
+        className="flex-1 overflow-y-auto px-3 py-2 space-y-1"
       >
-        {safeMessages.length === 0 ? (
+        {!hasMessages && needsName ? (
+          <div className="flex items-center justify-center h-full">
+            <WelcomeNameForm token={token} onSuccess={handleNameSuccess} />
+          </div>
+        ) : !hasMessages ? (
           <ChatEmpty />
         ) : (
-          <div className="space-y-6 max-w-3xl mx-auto">
-            {groups.map((group) => (
-              <div key={group.dayKey} className="space-y-3">
-                {group.dayLabel && <DayDivider label={group.dayLabel} />}
-                <div className="space-y-2">
-                  {group.messages.map((msg, idx) => {
-                    const prev = group.messages[idx - 1];
-                    const showTail = !prev || prev.direction !== msg.direction;
-                    return (
-                      <MessageBubble key={msg.id} msg={msg} showTail={showTail} />
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
+          groups.map((group) => (
+            <div key={group.dayKey} className="space-y-1">
+              <DayDivider label={group.dayLabel} />
+              {group.messages.map((m, i, arr) => {
+                const prevDir = i > 0 ? arr[i - 1].direction : null;
+                const showTail = prevDir === m.direction;
+                return (
+                  <MessageBubble key={m.id} msg={m} showTail={showTail} />
+                );
+              })}
+            </div>
+          ))
         )}
       </div>
 
-      <div className="p-4 bg-white dark:bg-zinc-950 border-t border-zinc-200 dark:border-zinc-800/80 shrink-0">
-        <div className="flex items-end gap-2 max-w-3xl mx-auto">
-          <Textarea
-            ref={textareaRef}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            placeholder={`Напишите сообщение${data.contactName ? `, ${data.contactName}` : ''}...`} // <-- Приятный бонус: подставляем имя в плейсхолдер
-            aria-label="Текст сообщения"
-            className="min-h-[44px] max-h-[120px] resize-none text-[15px] rounded-xl bg-zinc-100 dark:bg-zinc-900 border-transparent dark:border-zinc-800 focus-visible:ring-1 focus-visible:ring-blue-500 px-4 py-3 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-500"
-            rows={1}
-          />
-          <Button
-            type="button"
-            onClick={handleSend}
-            disabled={!text.trim()}
-            size="icon"
-            className="h-[44px] w-[44px] shrink-0 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all active:scale-95 disabled:opacity-50"
-            aria-label="Отправить сообщение"
-          >
-            {send.isPending ? (
-              <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-            ) : (
-              <Send className="h-5 w-5 ml-0.5" aria-hidden="true" />
-            )}
-          </Button>
-        </div>
+      <ChatComposer onSend={handleSend} />
+    </div>
+  );
+}
+
+
+function StatusScreen({
+  icon,
+  title,
+  text,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center bg-gradient-to-b from-background to-muted/20 p-6 text-center">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted/50 mb-4">
+        {icon}
       </div>
+      <p className="font-semibold text-foreground">{title}</p>
+      <p className="text-sm mt-2 text-muted-foreground max-w-xs leading-relaxed">
+        {text}
+      </p>
     </div>
   );
 }

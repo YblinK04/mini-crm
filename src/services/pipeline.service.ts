@@ -33,12 +33,14 @@ type PrismaDealRow = Prisma.DealGetPayload<{
     stageId: true;
     assigneeId: true;
     companyId: true;
+     publicToken: true;            
+    chatClosedAt: true;
     organizationId: true;
     customFields: true;
     createdAt: true;
     updatedAt: true;
     company: { select: { name: true } };
-    contacts: { select: { id: true; firstName: true; phone: true } };
+    contacts: { select: { id: true; firstName: true; phone: true; blockedAt: true; } };
     assignee: { select: { id: true; name: true; email: true; image: true } };
   };
 }>;
@@ -151,9 +153,11 @@ export class PipelineService {
                     customFields: true,
                     createdAt: true,
                     updatedAt: true,
+                    chatClosedAt: true,         
+                    publicToken: true,
                     company: { select: { name: true } },
                     contacts: {
-                      select: { id: true, firstName: true, phone: true },
+                      select: { id: true, firstName: true, phone: true, blockedAt: true },
                     },
                     assignee: {
                       select: { id: true, name: true, email: true, image: true },

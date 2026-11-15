@@ -70,7 +70,7 @@ export function SidebarClient({
       const data = await res.json();
       return data.count ?? 0;
     },
-    refetchInterval: 30_000,
+    refetchInterval: 7_000,
   });
 
   const hasOverflow = pipelines.length > SIDEBAR_PIPELINES_LIMIT;

@@ -2,11 +2,18 @@
 
 import { formatDistanceToNow } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { ArrowRight, Loader2 } from 'lucide-react';
+import {
+  ArrowRight,
+  Loader2,
+  Trash2,
+  MoreVertical,
+  Ban,
+} from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
@@ -19,8 +26,10 @@ interface InboxDealItemProps {
   isLast: boolean;
   targetPipelines: PipelineWithStages[];
   isMoving: boolean;
+  isDeleting: boolean;
   disabled: boolean;
   onMove: (pipelineId: string) => void;
+  onDelete: (blockContact: boolean) => void;
 }
 
 export function InboxDealItem({
@@ -28,8 +37,10 @@ export function InboxDealItem({
   isLast,
   targetPipelines,
   isMoving,
+  isDeleting,
   disabled,
   onMove,
+  onDelete,
 }: InboxDealItemProps) {
   const contact = deal.contacts[0];
   const lastMessage = deal.messages[0];
@@ -137,6 +148,62 @@ export function InboxDealItem({
                 </DropdownMenuItem>
               ))
             )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              disabled={disabled}
+              aria-label={`Действия со сделкой «${displayName}»`}
+              aria-busy={isDeleting}
+            >
+              {isDeleting ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <MoreVertical className="h-4 w-4" aria-hidden="true" />
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuItem
+              onClick={() => {
+                if (
+                  confirm(
+                    `Удалить сделку «${displayName}»? Это действие нельзя отменить.`,
+                  )
+                ) {
+                  onDelete(false);
+                }
+              }}
+              className="cursor-pointer text-xs text-destructive focus:text-destructive"
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-2" aria-hidden="true" />
+              Удалить сделку
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuItem
+              onClick={() => {
+                if (
+                  confirm(
+                    `Удалить сделку и заблокировать контакт «${displayName}»?\n\n` +
+                      `Клиент не сможет писать в Telegram и веб-чат.\n` +
+                      `Разблокировать можно в карточке контакта.`,
+                  )
+                ) {
+                  onDelete(true);
+                }
+              }}
+              className="cursor-pointer text-xs text-destructive focus:text-destructive"
+            >
+              <Ban className="h-3.5 w-3.5 mr-2" aria-hidden="true" />
+              Удалить и заблокировать
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

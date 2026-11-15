@@ -4,6 +4,10 @@ import { rateLimiter } from '@/lib/rate-limiter';
 
 const MAX_MESSAGES = 200;
 
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+};
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ token: string }> },
@@ -13,10 +17,10 @@ export async function GET(
     request.headers.get('x-real-ip') ??
     'unknown';
 
-  if (rateLimiter.check(`public-chat:${ip}`, 30, 60_000).limited) {
+  if (rateLimiter.check(`public-chat-get:${ip}`, 30, 60_000).limited) {
     return NextResponse.json(
-      { error: 'Слишком много запросов. Попробуйте позже.' },
-      { status: 429 },
+      { status: 'error', error: 'Слишком много запросов' },
+      { status: 429, headers: NO_STORE_HEADERS },
     );
   }
 
@@ -28,72 +32,93 @@ export async function GET(
       select: {
         id: true,
         title: true,
+        organizationId: true,
+        chatClosedAt: true,
         publicTokenExpiresAt: true,
-        organization: { select: { name: true, isActive: true } },
+        organization: { select: { name: true } },
         contacts: {
-          where: { telegramUsername: `web:${token}` },
           take: 1,
-          select: { firstName: true },
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            blockedAt: true,
+          },
+        },
+        messages: {
+          where: {
+            channel: 'WEB',
+            externalChatId: token,
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: MAX_MESSAGES,
+          select: {
+            id: true,
+            content: true,
+            direction: true,
+            createdAt: true,
+          },
         },
       },
     });
 
     if (!deal) {
-      return NextResponse.json({ error: 'Чат не найден' }, { status: 404 });
-    }
-
-    if (!deal.organization.isActive) {
       return NextResponse.json(
-        { error: 'Организация недоступна' },
-        { status: 403 },
+        { status: 'not_found' },
+        { status: 404, headers: NO_STORE_HEADERS },
       );
     }
 
-    if (
-      deal.publicTokenExpiresAt &&
-      deal.publicTokenExpiresAt < new Date()
-    ) {
+    if (deal.publicTokenExpiresAt && deal.publicTokenExpiresAt < new Date()) {
       return NextResponse.json(
-        { error: 'Срок действия ссылки истёк' },
-        { status: 410 },
+        {
+          status: 'expired',
+          organizationName: deal.organization.name,
+        },
+        { status: 410, headers: NO_STORE_HEADERS },
       );
     }
 
-    const rows = await prisma.message.findMany({
-      where: {
-        dealId: deal.id,
-        channel: 'WEB',
-        externalChatId: token,
-      },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: MAX_MESSAGES,
-      select: {
-        id: true,
-        content: true,
-        direction: true,
-        createdAt: true,
-      },
-    });
+    const contact = deal.contacts[0];
+
+    if (contact?.blockedAt) {
+      return NextResponse.json(
+        {
+          status: 'blocked',
+          organizationName: deal.organization.name,
+          contactFirstName: contact.firstName,
+        },
+        { status: 403, headers: NO_STORE_HEADERS },
+      );
+    }
+
+    if (deal.chatClosedAt) {
+      return NextResponse.json(
+        {
+          status: 'closed',
+          organizationName: deal.organization.name,
+          contactFirstName: contact?.firstName ?? null,
+        },
+        { status: 410, headers: NO_STORE_HEADERS },
+      );
+    }
 
     return NextResponse.json(
       {
+        status: 'active',
         id: deal.id,
-        title: deal.title,
         organization: deal.organization,
-        contactName: deal.contacts[0]?.firstName ?? null,
-        messages: rows.reverse(),
+        contactName: contact?.firstName ?? null,
+        messages: deal.messages.reverse(),
       },
-      {
-        headers: {
-          'Cache-Control': 'no-store, no-cache, must-revalidate, private',
-        },
-      },
+      { headers: NO_STORE_HEADERS },
     );
-  } catch (error: unknown) {
+  } catch (error) {
     console.error('[PUBLIC_CHAT_GET]', error);
     return NextResponse.json(
-      { error: 'Внутренняя ошибка сервера' },
-      { status: 500 },
+      { status: 'error' },
+      { status: 500, headers: NO_STORE_HEADERS },
     );
   }
 }

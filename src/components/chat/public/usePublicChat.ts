@@ -4,9 +4,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { isChatMessage, TEMP_ID_PREFIX } from './utils';
-import type { ChatData, ChatMessage } from './types';
+import type { ActiveChatData, ChatMessage, ChatState } from './types';
 
 const SCROLL_BOTTOM_THRESHOLD = 60;
+const STATE_ERRORS = new Set(['blocked', 'closed', 'expired', 'not_found']);
 
 export function usePublicChat(token: string) {
   const queryClient = useQueryClient();
@@ -17,20 +18,36 @@ export function usePublicChat(token: string) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isAtBottomRef = useRef(true);
 
-  
-
-  const query = useQuery<ChatData>({
+  const query = useQuery<ChatState>({
     queryKey,
     queryFn: async () => {
       const res = await fetch(`/api/public/chat/${token}`);
-      if (res.status === 404) throw new Error('not_found');
-      if (!res.ok) throw new Error('server_error');
-      return res.json();
+      const data = (await res.json().catch(() => null)) as
+        | ChatState
+        | null;
+
+      if (!data || typeof data.status !== 'string') {
+        return { status: 'not_found' } satisfies ChatState;
+      }
+
+      return data;
     },
-    refetchInterval: 5000,
+    refetchInterval: (q) => {
+      const status = q.state.data?.status;
+      if (status === 'active') return 5_000;
+      if (
+        status === 'blocked' ||
+        status === 'closed' ||
+        status === 'expired'
+      ) {
+        return 60_000;
+      }
+      return false; 
+    },
     retry: false,
   });
 
+  const isActive = query.data?.status === 'active';
 
   const send = useMutation({
     mutationFn: async (content: string) => {
@@ -39,13 +56,24 @@ export function usePublicChat(token: string) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: content }),
       });
-      if (!res.ok) throw new Error('send_failed');
-      return (await res.json()) as unknown;
+
+      const data = (await res.json().catch(() => null)) as
+        | Record<string, unknown>
+        | null;
+
+      if (!res.ok) {
+        const status = (data?.status as string | undefined) ?? 'send_failed';
+        throw new Error(status);
+      }
+
+      return data;
     },
 
     onMutate: async (content) => {
+      if (!isActive) return undefined;
+
       await queryClient.cancelQueries({ queryKey });
-      const previous = queryClient.getQueryData<ChatData>(queryKey);
+      const previous = queryClient.getQueryData<ChatState>(queryKey);
 
       const optimistic: ChatMessage = {
         id: `${TEMP_ID_PREFIX}${crypto.randomUUID()}`,
@@ -54,44 +82,58 @@ export function usePublicChat(token: string) {
         createdAt: new Date().toISOString(),
       };
 
-      queryClient.setQueryData<ChatData>(queryKey, (old) =>
-        old
-          ? { ...old, messages: [...old.messages, optimistic] }
-          : old,
-      );
+      queryClient.setQueryData<ChatState>(queryKey, (old) => {
+        if (!old || old.status !== 'active') return old;
+        return { ...old, messages: [...old.messages, optimistic] };
+      });
 
       return { previous, tempId: optimistic.id };
     },
 
     onSuccess: (rawServerMessage, _content, ctx) => {
+      if (!ctx) {
+        queryClient.invalidateQueries({ queryKey });
+        return;
+      }
+
       if (!isChatMessage(rawServerMessage)) {
         queryClient.invalidateQueries({ queryKey });
         return;
       }
 
-      queryClient.setQueryData<ChatData>(queryKey, (old) => {
-        if (!old) return old;
+      queryClient.setQueryData<ChatState>(queryKey, (old) => {
+        if (!old || old.status !== 'active') return old;
         return {
           ...old,
           messages: old.messages.map((m) =>
-            m.id === ctx?.tempId ? rawServerMessage : m,
+            m.id === ctx.tempId ? rawServerMessage : m,
           ),
         };
       });
     },
 
-    onError: (_err, _content, ctx) => {
+    onError: (err, _content, ctx) => {
       if (ctx?.previous) {
         queryClient.setQueryData(queryKey, ctx.previous);
       }
-      toast.error('Не удалось отправить сообщение');
+
+      const code = err instanceof Error ? err.message : 'send_failed';
+
+      if (STATE_ERRORS.has(code)) {
+        queryClient.invalidateQueries({ queryKey });
+        if (code === 'blocked') toast.error('Чат заблокирован менеджером');
+        else if (code === 'closed') toast.error('Чат закрыт менеджером');
+        else if (code === 'expired')
+          toast.error('Срок действия ссылки истёк');
+      } else {
+        toast.error('Не удалось отправить сообщение');
+      }
     },
 
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey });
     },
   });
-
 
   const handleScroll = () => {
     const el = scrollRef.current;
@@ -102,7 +144,9 @@ export function usePublicChat(token: string) {
   };
 
   const lastMessageId =
-    query.data?.messages[query.data.messages.length - 1]?.id;
+    query.data?.status === 'active'
+      ? query.data.messages[query.data.messages.length - 1]?.id
+      : undefined;
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -111,7 +155,6 @@ export function usePublicChat(token: string) {
     }
   }, [lastMessageId]);
 
-
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -119,8 +162,8 @@ export function usePublicChat(token: string) {
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }, [text]);
 
-
   const handleSend = () => {
+    if (!isActive) return;
     const trimmed = text.trim();
     if (!trimmed) return;
     setText('');
@@ -131,8 +174,14 @@ export function usePublicChat(token: string) {
     });
   };
 
+  const activeData: ActiveChatData | null = isActive
+    ? (query.data as ActiveChatData)
+    : null;
+
   return {
     ...query,
+    activeData,
+    isActive,
     send,
     text,
     setText,

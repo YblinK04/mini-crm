@@ -54,7 +54,7 @@ export function registerAutoTaskOnStage() {
           organizationId,
           dealId: deal.id,
           title: stage.autoTaskTitle,
-          description: `Автозадача: сделка перешла в этап "${stage.name}"`,
+          description: `Автозадача: сделка "${deal.title}" перешла в этап "${stage.name}"`,
           dueAt,
           createdById: userId,
         },

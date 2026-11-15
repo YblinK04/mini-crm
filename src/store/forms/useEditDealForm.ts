@@ -34,7 +34,12 @@ export type EditDealFormInputs = z.infer<typeof editDealFormSchema>;
 
 export interface DealContact {
   id: string;
-  name?: string;
+  firstName: string;
+  lastName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  telegramUsername?: string | null;
+  blockedAt?: string | null;  
 }
 
 export interface Deal {
@@ -48,6 +53,7 @@ export interface Deal {
   companyId: string | null;
   contacts?: DealContact[];
   customFields?: Record<string, unknown> | null;
+  chatClosedAt?: string | null;
 }
 
 interface UseEditDealFormOptions {
@@ -62,7 +68,6 @@ interface UseEditDealFormOptions {
     priority: PriorityType;
     customFields: Record<string, string>;
   }) => Promise<void> | void;
-  // 🔥 ИНВЕРСИЯ УПРАВЛЕНИЯ: Передаем сюда вашу рабочую мутацию удаления сделки
   onDeleteDeal?: (payload: { dealId: string; stageId: string }) => void;
   isPending?: boolean;
 }

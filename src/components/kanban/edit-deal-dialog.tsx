@@ -25,6 +25,7 @@ import { Trash2 } from 'lucide-react';
 import { CRMTextField } from './crm-text-field';
 import { CRMPrioritySelect } from './crm-priority-select';
 import { CustomFieldsSection } from './custom-field-section';
+import { BlockContactButton } from './BlockContactButton';
 import { ContactSelector, NO_CONTACT } from '../deals/ContactSelector';
 import { WebChatPanel } from '../deals/WebChatPanel';
 import { useWebChatStatus } from '../deals/useWebChatStatus';
@@ -45,7 +46,6 @@ export function EditDealDialog({
 }: EditDealDialogProps) {
   const { updateDeal, deleteDeal } = useDealMutations(deal?.pipelineId ?? '');
 
-
   const {
     data: contacts = [],
     isLoading: contactsLoading,
@@ -59,7 +59,6 @@ export function EditDealDialog({
     },
     enabled: open,
   });
-
 
   const webChat = useWebChatStatus(deal?.id, open);
 
@@ -108,6 +107,16 @@ export function EditDealDialog({
     });
   };
 
+  // Сохранённый контакт (из БД), а не выбранный в форме
+  const persistedContact = deal?.contacts?.[0] ?? null;
+
+  // Пользователь сменил контакт в форме, но не сохранил —
+  // блокировка старого контакта уже неактуальна
+  const contactChangedButUnsaved =
+    persistedContact !== null &&
+    selectedContactId !== persistedContact.id &&
+    !isSubmitting;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[540px] max-h-[85vh] overflow-y-auto border-none shadow-2xl bg-background text-foreground rounded-2xl scrollbar-thin">
@@ -155,6 +164,24 @@ export function EditDealDialog({
                       onChange={handleContactChange}
                       disabled={isSubmitting}
                     />
+
+                    {persistedContact && (
+                      <div className="pt-2 space-y-1.5">
+                        <BlockContactButton
+                          contactId={persistedContact.id}
+                          initialBlocked={Boolean(persistedContact.blockedAt)}
+                          dealId={deal.id}
+                          disabled={contactChangedButUnsaved}
+                        />
+                        <p className="text-[10px] leading-relaxed text-muted-foreground">
+                          {contactChangedButUnsaved
+                            ? 'Сначала сохраните смену контакта — блокировка относится к сохранённому контакту.'
+                            : persistedContact.blockedAt
+                              ? 'Клиент не может писать в Telegram и веб-чат. Разблокируйте, чтобы восстановить переписку.'
+                              : 'Заблокированный клиент не сможет писать в Telegram и веб-чат. Все открытые чаты будут закрыты.'}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   <CRMTextField

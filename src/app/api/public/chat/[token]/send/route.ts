@@ -8,6 +8,10 @@ const SendSchema = z.object({
   text: z.string().trim().min(1, 'Сообщение не может быть пустым').max(4000),
 });
 
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+};
+
 const WINDOW_MS = 60_000;
 const MAX_PER_WINDOW = 10;
 const recentRequests = new Map<string, { count: number; resetAt: number }>();
@@ -47,18 +51,18 @@ export async function POST(
 
   if (!rateLimit(`${ip}:${token}`)) {
     return NextResponse.json(
-      { error: 'Слишком много сообщений. Подождите минуту.' },
-      { status: 429 },
+      { status: 'error', error: 'Слишком много сообщений. Подождите минуту.' },
+      { status: 429, headers: NO_STORE_HEADERS },
     );
   }
 
   const body = await request.json().catch(() => null);
-
   const parsed = SendSchema.safeParse(body);
+
   if (!parsed.success) {
     return NextResponse.json(
-      { error: 'Некорректное сообщение', details: parsed.error.flatten() },
-      { status: 422 },
+      { status: 'error', error: 'Некорректное сообщение', details: parsed.error.flatten() },
+      { status: 422, headers: NO_STORE_HEADERS },
     );
   }
 
@@ -69,24 +73,43 @@ export async function POST(
         id: true,
         organizationId: true,
         publicTokenExpiresAt: true,
+        chatClosedAt: true,
         contacts: {
           take: 1,
           orderBy: { createdAt: 'asc' },
-          select: { id: true },
+          select: { id: true, blockedAt: true },
         },
       },
     });
 
     if (!deal) {
-      return NextResponse.json({ error: 'Чат не найден' }, { status: 404 });
+      return NextResponse.json(
+        { status: 'not_found' },
+        { status: 404, headers: NO_STORE_HEADERS },
+      );
     }
 
     if (deal.publicTokenExpiresAt && deal.publicTokenExpiresAt < new Date()) {
       return NextResponse.json(
-        { error: 'Срок действия ссылки истёк' },
-        { status: 410 },
+        { status: 'expired' },
+        { status: 410, headers: NO_STORE_HEADERS },
       );
     }
+
+    if (deal.contacts[0]?.blockedAt) {
+      return NextResponse.json(
+        { status: 'blocked' },
+        { status: 403, headers: NO_STORE_HEADERS },
+      );
+    }
+
+    if (deal.chatClosedAt) {
+      return NextResponse.json(
+        { status: 'closed' },
+        { status: 410, headers: NO_STORE_HEADERS },
+      );
+    }
+
     let contactId = deal.contacts[0]?.id;
 
     if (!contactId) {
@@ -128,52 +151,49 @@ export async function POST(
       });
     }
 
-  const message = await prisma.message.create({
-  data: {
-    organizationId: deal.organizationId,
-    contactId,
-    dealId: deal.id,
-    channel: 'WEB',
-    direction: 'IN',
-    externalChatId: token,
-    externalMessageId: randomUUID(),
-    content: parsed.data.text,
-    rawPayload: {
-      ip,
-      userAgent: request.headers.get('user-agent') ?? null,
-    },
-  },
-  select: { id: true, direction: true, content: true, createdAt: true },
-});
-
- const fullMessage = await prisma.message.findUniqueOrThrow({
-  where: { id: message.id },
-});
-
-const contact = await prisma.contact.findUniqueOrThrow({
-  where: { id: contactId },
-});
-
-void events.emit('message.received', {
-  message: fullMessage,
-  contact,
-  dealId: deal.id,
-  organizationId: deal.organizationId,
-}).catch((e) => console.error('[PUBLIC_CHAT_EMIT_ERROR]', e));
-
-return NextResponse.json(message, {
-  status: 201,
-  headers: {
-    'Cache-Control': 'no-store, no-cache, must-revalidate, private',
-  },
-});
-  } catch (error: unknown) {
-    console.error('[PUBLIC_CHAT_POST]', {
-      error,
+    const messageWithContact = await prisma.message.create({
+      data: {
+        organizationId: deal.organizationId,
+        contactId,
+        dealId: deal.id,
+        channel: 'WEB',
+        direction: 'IN',
+        externalChatId: token,
+        externalMessageId: randomUUID(),
+        content: parsed.data.text,
+        rawPayload: {
+          ip,
+          userAgent: request.headers.get('user-agent') ?? null,
+        },
+      },
+      include: { contact: true },
     });
+
+    const { contact, ...messageForEmit } = messageWithContact;
+
+    void events
+      .emit('message.received', {
+        message: messageForEmit,
+        contact,
+        dealId: deal.id,
+        organizationId: deal.organizationId,
+      })
+      .catch((e) => console.error('[PUBLIC_CHAT_EMIT_ERROR]', e));
+
     return NextResponse.json(
-      { error: 'Внутренняя ошибка сервера' },
-      { status: 500 },
+      {
+        id: messageWithContact.id,
+        direction: messageWithContact.direction,
+        content: messageWithContact.content,
+        createdAt: messageWithContact.createdAt,
+      },
+      { status: 201, headers: NO_STORE_HEADERS },
+    );
+  } catch (error: unknown) {
+    console.error('[PUBLIC_CHAT_POST]', { error });
+    return NextResponse.json(
+      { status: 'error', error: 'Внутренняя ошибка сервера' },
+      { status: 500, headers: NO_STORE_HEADERS },
     );
   }
 }

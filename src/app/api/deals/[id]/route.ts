@@ -228,52 +228,107 @@ export const DELETE = auth(async (req, ctx) => {
   const userId = req.auth?.user?.id;
   const organizationId = req.auth?.user?.organizationId;
   if (!userId || !organizationId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
     const { id: dealId } = await (ctx as unknown as RouteContext).params;
     if (!dealId) {
-      return NextResponse.json({ error: "Идентификатор сделки не указан" }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Идентификатор сделки не указан' },
+        { status: 400 },
+      );
     }
+
+    const url = new URL(req.url);
+    const shouldBlock = url.searchParams.get('block') === 'true';
 
     const existingDeal = await prisma.deal.findFirst({
       where: { id: dealId, organizationId },
-      select: { id: true, title: true },
+      select: {
+        id: true,
+        title: true,
+        contacts: { select: { id: true } },
+      },
     });
+
     if (!existingDeal) {
-      return NextResponse.json({ error: "Сделка не найдена или доступ ограничен" }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Сделка не найдена или доступ ограничен' },
+        { status: 404 },
+      );
     }
 
-    await prisma.deal.delete({
-      where: { id: dealId, organizationId },
+    await prisma.$transaction(async (tx) => {
+      if (shouldBlock && existingDeal.contacts.length > 0) {
+        await tx.contact.updateMany({
+          where: {
+            id: { in: existingDeal.contacts.map((c) => c.id) },
+          },
+          data: { blockedAt: new Date() },
+        });
+      }
+
+      await tx.deal.delete({
+        where: { id: dealId, organizationId },
+      });
     });
 
     try {
-      await prisma.notification.create({
-        data: {
-          userId,
-          title: "Сделка удалена 🗑️",
-          message: `Сделка "${existingDeal.title}" была успешно удалена менеджером.`,
+      const admins = await prisma.user.findMany({
+        where: {
+          organizationId,
+          role: { in: ['OWNER', 'ADMIN'] },
+          isActive: true,
         },
+        select: { id: true },
       });
+
+      if (admins.length > 0) {
+        await prisma.notification.createMany({
+          data: admins.map((u) => ({
+            userId: u.id,
+            title: 'Сделка удалена 🗑️',
+            message: `Сделка "${existingDeal.title}" удалена.${
+              shouldBlock ? ' Контакт(ы) заблокированы.' : ''
+            }`,
+          })),
+        });
+      }
     } catch (notifyError) {
-      console.error("[CRM_API_DEAL_DELETE_NOTIFY_FAILED]", notifyError);
+      console.error('[CRM_API_DEAL_DELETE_NOTIFY_FAILED]', notifyError);
+    }
+
+    if (shouldBlock) {
+      try {
+        await prisma.auditLog.create({
+          data: {
+            organizationId,
+            userId,
+            action: 'DELETE_DEAL_WITH_BLOCK',
+            metadata: {
+              dealId,
+              dealTitle: existingDeal.title,
+              contactIds: existingDeal.contacts.map((c) => c.id),
+            },
+          },
+        });
+      } catch (auditError) {
+        console.error('[CRM_API_DEAL_DELETE_AUDIT_FAILED]', auditError);
+      }
     }
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     console.error(`[CRM_API_DEAL_DELETE_CRITICAL_FAILED]`, error);
-
     if (isPrismaNotFound(error)) {
       return NextResponse.json(
-        { error: "Сделка не найдена или доступ ограничен" },
+        { error: 'Сделка не найдена или доступ ограничен' },
         { status: 404 },
       );
     }
-
     return NextResponse.json(
-      { error: "Не удалось удалить сделку из-за ограничений СУБД" },
+      { error: 'Не удалось удалить сделку из-за ограничений СУБД' },
       { status: 500 },
     );
   }

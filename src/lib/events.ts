@@ -28,7 +28,6 @@ class EventBus {
   async emit<T = unknown>(event: string, payload: T): Promise<void> {
     const set = this.handlers.get(event);
 
-    // ── ДИАГНОСТИКА: пока не уберём — оставь этот лог ──
     console.log(
       `[EventBus] emit "${event}", handlers: ${set?.size ?? 0}`,
     );
