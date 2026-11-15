@@ -1,9 +1,11 @@
 import { prisma } from '@/lib/prisma';
-import { getSettings } from '@/lib/settings';
+import { getSettings, invalidateSettings } from '@/lib/settings';
 import { sendEmail } from '@/services/email.service';
 
 const CHECK_INTERVAL_MS = 15 * 60 * 1000;
+
 const TARGET_HOUR = 9;
+const WINDOW_HOURS = 2; 
 
 type TimerHandle = ReturnType<typeof setInterval> & { unref?: () => void };
 const g = globalThis as typeof globalThis & {
@@ -11,14 +13,13 @@ const g = globalThis as typeof globalThis & {
   __emailDigestInFlight?: boolean;
 };
 
-
-function localDateKey(date: Date): string {
-  return date.toLocaleDateString('sv-SE');
-}
-
 export async function runDailyDigestIfDue(): Promise<boolean> {
   const now = new Date();
-  if (now.getHours() < TARGET_HOUR) return false;
+  const hour = now.getHours();
+
+  if (hour < TARGET_HOUR || hour >= TARGET_HOUR + WINDOW_HOURS) {
+    return false;
+  }
 
   const settings = await getSettings();
   if (!settings) return false;
@@ -26,16 +27,26 @@ export async function runDailyDigestIfDue(): Promise<boolean> {
   if (!settings.notifyDailyDigest) return false;
   if (!settings.ownerEmail) return false;
 
-  const todayKey = localDateKey(now);
-  if (
-    settings.emailDigestLastSentAt &&
-    localDateKey(settings.emailDigestLastSentAt) === todayKey
-  ) {
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const claimed = await prisma.settings.updateMany({
+    where: {
+      organizationId: settings.organizationId,
+      OR: [
+        { emailDigestLastSentAt: null },
+        { emailDigestLastSentAt: { lt: startOfToday } },
+      ],
+    },
+    data: { emailDigestLastSentAt: new Date() },
+  });
+
+  if (claimed.count === 0) {
     return false;
   }
 
-  const startOfToday = new Date(now);
-  startOfToday.setHours(0, 0, 0, 0);
+  invalidateSettings();
+
   const endOfToday = new Date(startOfToday);
   endOfToday.setDate(endOfToday.getDate() + 1);
 
@@ -64,10 +75,6 @@ export async function runDailyDigestIfDue(): Promise<boolean> {
   ]);
 
   if (tasksToday === 0 && tasksOverdue === 0 && inboxCount === 0) {
-    await prisma.settings.update({
-      where: { organizationId: settings.organizationId },
-      data: { emailDigestLastSentAt: new Date() },
-    });
     return false;
   }
 
@@ -117,11 +124,13 @@ export async function runDailyDigestIfDue(): Promise<boolean> {
     html,
   });
 
-  if (sent) {
+  if (!sent) {
+    
     await prisma.settings.update({
       where: { organizationId: settings.organizationId },
-      data: { emailDigestLastSentAt: new Date() },
+      data: { emailDigestLastSentAt: null },
     });
+    invalidateSettings();
   }
 
   return sent;
