@@ -13,15 +13,17 @@ interface DealStoreState {
   isLoading: boolean;
   error: string | null;
   backupStages: KanbanStage[] | null;
+  isDragging: boolean;
 
   editingDeal: KanbanDeal | null;
 
   setPipelineData: (data: PipelineDataDTO) => void;
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
+  setDragging: (isDragging: boolean) => void;
+  applyServerSnapshot: (data: PipelineDataDTO) => void;
 
   openDealForEdit: (deal: KanbanDeal) => void;
-
   closeDealEdit: () => void;
 
   moveDealOptimistic: (payload: {
@@ -52,6 +54,7 @@ export const useDealStore = create<DealStoreState>()(
       isLoading: false,
       error: null,
       backupStages: null,
+      isDragging: false,
       editingDeal: null,
 
       setPipelineData: (data) =>
@@ -68,6 +71,23 @@ export const useDealStore = create<DealStoreState>()(
 
       setLoading: (isLoading) => set({ isLoading }, false, 'setLoading'),
       setError: (error) => set({ error }, false, 'setError'),
+      setDragging: (isDragging) =>
+        set({ isDragging }, false, 'setDragging'),
+      applyServerSnapshot: (data) =>
+        set(
+          (state) => {
+            if (state.isDragging) return {};
+            if (state.backupStages) return {};
+            return {
+              pipelineId: data.id,
+              stages: data.stages,
+              isLoading: false,
+              error: null,
+            };
+          },
+          false,
+          'applyServerSnapshot',
+        ),
 
       clearBackup: () => set({ backupStages: null }, false, 'clearBackup'),
 
@@ -82,7 +102,7 @@ export const useDealStore = create<DealStoreState>()(
           (state) => {
             if (!state.backupStages) return {};
             console.warn(
-              '⚠️ [CRM_STORE_ROLLBACK] Выполнен экстренный откат UI к стабильному стейту базы данных.',
+              '⚠️ [CRM_STORE_ROLLBACK] Откат UI к стабильному стейту.',
             );
             return {
               stages: state.backupStages,
@@ -105,7 +125,6 @@ export const useDealStore = create<DealStoreState>()(
                 return deal;
               }),
             }));
-
             return { stages: updatedStages };
           },
           false,

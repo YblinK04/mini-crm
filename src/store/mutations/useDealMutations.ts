@@ -91,7 +91,9 @@ export function useDealMutations(pipelineId: string) {
         companyId: null, 
         company: null, 
         contacts: [], 
-        assignee: null 
+        assignee: null,
+        publicToken: null,
+        chatClosedAt: null
       };
       
       addDealOptimistic(variables.stageId, tempDeal);
