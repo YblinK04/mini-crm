@@ -22,21 +22,27 @@ export function useKanbanDnd(pipelineId: string) {
   const { mutate: moveDealOnServer } = useMutation<unknown, Error, MutationPayload>({
     mutationKey: ['pipeline', 'move', pipelineId],
     mutationFn: async (payload) => {
-      const response = await fetch(`/api/deals/${payload.dealId}`, {
-        method: 'PATCH',
+      const response = await fetch(`/api/deals/${payload.dealId}/move`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          stageId: payload.newStageId,
-          order: payload.newOrder,
+          newStageId: payload.newStageId,
+          newOrder: payload.newOrder,
+          pipelineId: payload.pipelineId,
         }),
       });
       if (!response.ok) {
-        throw new Error(`Сервер отклонил сохранение. Статус: ${response.status}`);
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Сервер отклонил сохранение. Статус: ${response.status}`);
       }
       return response.json();
     },
     onSuccess: () => {
       clearBackup();
+      queryClient.invalidateQueries({ queryKey: ['deals'] });
+      queryClient.invalidateQueries({ queryKey: ['inbox-pipeline-deals'] });
+      queryClient.invalidateQueries({ queryKey: ['inbox-pipeline-count'] });
+      queryClient.invalidateQueries({ queryKey: ['pipeline', pipelineId] });
     },
     onError: (error) => {
       console.error('[KANBAN_DND_ERROR]', error);
