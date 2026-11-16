@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { pipelineService } from '@/services/pipeline.service'; 
+import { pipelineService } from '@/services/pipeline.service';
+import { requireOwnerOrAdmin } from '@/lib/auth-helpers';
 
 interface RouteContext {
   params: Promise<{
-    id: string; 
+    id: string;
   }>;
 }
 
@@ -14,13 +15,16 @@ export async function PATCH(
 ): Promise<Response> {
   try {
     const session = await auth();
-    if (!session?.user?.organizationId) {
+    const denied = requireOwnerOrAdmin(session);
+    if (denied) return denied;
+
+    const organizationId = session?.user?.organizationId;
+    if (!organizationId) {
       return NextResponse.json({ error: 'Пользователь не авторизован' }, { status: 401 });
     }
 
-    const { organizationId } = session.user;
-    const { id: pipelineId } = await context.params; 
-    
+    const { id: pipelineId } = await context.params;
+
     const body = await request.json().catch(() => null);
     if (!body) {
       return NextResponse.json({ error: 'Некорректный JSON тела запроса' }, { status: 400 });
@@ -33,9 +37,13 @@ export async function PATCH(
         return NextResponse.json({ error: 'Параметр stageId обязателен' }, { status: 400 });
       }
       const updatedStage = await pipelineService.updateStage(
-        String(stageId), 
-        { name, color,  autoTaskTitle: autoTaskTitle ?? null,
-          autoTaskDays: autoTaskDays ?? null, }, 
+        String(stageId),
+        {
+          name,
+          color,
+          autoTaskTitle: autoTaskTitle ?? null,
+          autoTaskDays: autoTaskDays ?? null,
+        },
         organizationId
       );
       return NextResponse.json(updatedStage, { status: 200 });
@@ -60,53 +68,42 @@ export async function PATCH(
   }
 }
 
-
 export async function DELETE(
   request: Request,
   context: RouteContext
 ): Promise<Response> {
-  console.log('🛑 [ROUTE_DELETE_TRIGGER] Запрос на удаление колонки ДОШЕЛ до роута!');
-
   try {
     const session = await auth();
-    console.log('👤 [ROUTE_DELETE_AUTH] Сессия из Auth.js:', {
-      hasSession: Boolean(session),
-      userId: session?.user?.id,
-      organizationId: session?.user?.organizationId,
-    });
+    const denied = requireOwnerOrAdmin(session);
+    if (denied) return denied;
 
-    const organizationId = session?.user?.organizationId || 'NOT_FOUND_IN_SESSION';
-    
-    const { id: pipelineId } = await context.params; 
-    console.log('📍 [ROUTE_DELETE_URL_PARAMS] pipelineId из URL:', pipelineId);
+    const organizationId = session?.user?.organizationId;
+    if (!organizationId) {
+      return NextResponse.json({ error: 'Пользователь не авторизован' }, { status: 401 });
+    }
+
+    const { id: pipelineId } = await context.params;
 
     const { searchParams } = new URL(request.url);
     const stageId = searchParams.get('stageId');
-    console.log('📋 [ROUTE_DELETE_QUERY_PARAMS] stageId из строки запроса:', stageId);
 
     if (!stageId) {
-      console.warn('⚠️ [ROUTE_DELETE_ABORT] Отмена: Не передан stageId');
-      return NextResponse.json({ error: 'Идентификатор колонки (stageId) обязателен' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Идентификатор колонки (stageId) обязателен' },
+        { status: 400 }
+      );
     }
 
-    console.log(`🚀 [ROUTE_DELETE_SERVICE_CALL] Передаем в pipelineService.deleteStage параметры:`, {
-      stageId,
-      organizationId
-    });
-
     const result = await pipelineService.deleteStage(stageId, organizationId);
-    
-    console.log('✅ [ROUTE_DELETE_SUCCESS] Сервис успешно выполнил удаление:', result);
+
     return NextResponse.json(result, { status: 200 });
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Ошибка удаления этапа';
-    
-    console.error('❌ [ROUTE_DELETE_CATCH_ERROR] Перехвачена ошибка в роуте:', {
+    console.error('[ROUTE_PIPELINES_DELETE_ERROR]', {
       message: errorMessage,
-      stack: error instanceof Error ? error.stack : 'No stack'
+      stack: error instanceof Error ? error.stack : 'No stack',
     });
-
     return NextResponse.json({ error: errorMessage }, { status: 400 });
   }
 }

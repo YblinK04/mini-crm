@@ -7,12 +7,13 @@ import {
   UpdateEmailSettingsSchema,
 } from '@/lib/schemas';
 import { testSmtpConnection, sendEmail } from '@/services/email.service';
+import { requireOwnerOrAdmin } from '@/lib/auth-helpers';
+
 
 export async function GET(): Promise<Response> {
   const session = await auth();
-  if (!session?.user?.organizationId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+    const denied = requireOwnerOrAdmin(session);
+    if (denied) return denied;
 
   const settings = await getSettings();
 

@@ -6,9 +6,9 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { TrainingLabel } from '@prisma/client';
+// import { useMutation } from '@tanstack/react-query';   // Bayes off
+// import { toast } from 'sonner';                        // Bayes off
+// import { TrainingLabel } from '@prisma/client';        // Bayes off
 import { Send, MessageSquare, Loader2, Globe, MessageCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -51,38 +51,42 @@ export function Chat({
   } = useChatChannel(messages, hasTelegramContact, webToken);
 
   const isPending = send.isPending;
-  const labelMutation = useMutation({
-    mutationFn: async ({
-      messageId,
-      label,
-    }: {
-      messageId: string;
-      label: TrainingLabel;
-    }) => {
-      const res = await fetch(`/api/messages/${messageId}/label`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? 'Не удалось сохранить метку');
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      toast.success('Метка сохранена — модель обновится сразу');
-    },
-    onError: (err: unknown) => {
-      const message =
-        err instanceof Error ? err.message : 'Не удалось сохранить метку';
-      toast.error(message);
-    },
-  });
 
-  const handleLabel = (messageId: string, label: TrainingLabel) => {
-    labelMutation.mutate({ messageId, label });
-  };
+  // ── Bayes off: лейблинг сообщений (👍/👎) временно отключён ──────
+  // Раскомментировать при возврате к ML-фильтру (200+ лейблов в audit_logs).
+  //
+  // const labelMutation = useMutation({
+  //   mutationFn: async ({
+  //     messageId,
+  //     label,
+  //   }: {
+  //     messageId: string;
+  //     label: TrainingLabel;
+  //   }) => {
+  //     const res = await fetch(`/api/messages/${messageId}/label`, {
+  //       method: 'POST',
+  //       headers: { 'Content-Type': 'application/json' },
+  //       body: JSON.stringify({ label }),
+  //     });
+  //     if (!res.ok) {
+  //       const data = await res.json().catch(() => ({}));
+  //       throw new Error(data.error ?? 'Не удалось сохранить метку');
+  //     }
+  //     return res.json();
+  //   },
+  //   onSuccess: () => {
+  //     toast.success('Метка сохранена — модель обновится сразу');
+  //   },
+  //   onError: (err: unknown) => {
+  //     const message =
+  //       err instanceof Error ? err.message : 'Не удалось сохранить метку';
+  //     toast.error(message);
+  //   },
+  // });
+  //
+  // const handleLabel = (messageId: string, label: TrainingLabel) => {
+  //   labelMutation.mutate({ messageId, label });
+  // };
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -193,11 +197,7 @@ export function Chat({
           </div>
         ) : (
           messages.map((m) => (
-            <MessageBubble
-              key={m.id}
-              message={m}
-              onLabel={handleLabel}
-            />
+            <MessageBubble key={m.id} message={m} />
           ))
         )}
       </div>

@@ -7,7 +7,7 @@ export interface InboxDeal {
   createdAt: string;
   contacts: { firstName: string; lastName: string | null }[];
   messages: { content: string; createdAt: string }[];
-  bayesLabel: string | null;
+  // bayesLabel: string | null;
 }
 
 export interface PipelineWithStages {

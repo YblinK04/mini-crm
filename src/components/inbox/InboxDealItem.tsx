@@ -77,16 +77,18 @@ export function InboxDealItem({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold truncate">{displayName}</span>
-          {deal.bayesLabel === 'LEAD' && (
+          {/* Bayes off — вернуть при 200+ лейблах в audit_logs
+            {deal.bayesLabel === 'LEAD' && (
             <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded shrink-0">
-              Лид
+                Лид
             </span>
-          )}
-          {deal.bayesLabel === 'COMPLAINT' && (
-            <span className="text-[10px] font-bold uppercase tracking-wider text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded shrink-0">
-              Жалоба
+           )}
+         {deal.bayesLabel === 'COMPLAINT' && (
+          <span className="text-[10px] font-bold uppercase tracking-wider text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded shrink-0">
+               Жалоба
             </span>
-          )}
+             )}
+          */}
         </div>
         <p className="text-xs text-muted-foreground truncate mt-0.5">
           {lastMessage?.content || 'Нет сообщений'}

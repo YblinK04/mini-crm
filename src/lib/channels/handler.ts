@@ -5,50 +5,45 @@ import { contactService } from '@/services/contact.service';
 import { messageService } from '@/services/message.service';
 import { events } from '@/lib/events';
 import { rateLimiter } from '@/lib/rate-limiter';
-import { NaiveBayesClassifier } from '@/lib/classifier';
-import { seedDefaultExamples } from '@/lib/classifier/seed-runner';
+// import { NaiveBayesClassifier } from '@/lib/classifier';        // Bayes off
+// import { seedDefaultExamples } from '@/lib/classifier/seed-runner'; // Bayes off
 import { getAdapter } from './registry';
 import { getOrCreateInboxPipeline } from '@/lib/inbox-pipeline';
 import type { IncomingMessage } from './types';
 
-interface CachedClassifier {
-  classifier: NaiveBayesClassifier;
-  loadedAt: number;
-  examplesCount: number;
-}
+// ── Bayes classifier — временно отключён ─────────────────────────
+// Весь блок сохранён для будущего возврата к ML-фильтру.
+// Раскомментировать вместе с блоком в handleIncomingMessage.
+//
+// interface CachedClassifier {
+//   classifier: NaiveBayesClassifier;
+//   loadedAt: number;
+//   examplesCount: number;
+// }
+//
+// const CLASSIFIER_TTL_MS = 60 * 60 * 1000;
+// const classifierCache = new Map<string, CachedClassifier>();
+//
+// async function getClassifier(organizationId: string): Promise<NaiveBayesClassifier> {
+//   const cached = classifierCache.get(organizationId);
+//   const now = Date.now();
+//   if (cached && now - cached.loadedAt < CLASSIFIER_TTL_MS) return cached.classifier;
+//   const examples = await prisma.trainingExample.findMany({
+//     where: { organizationId },
+//     select: { text: true, label: true },
+//   });
+//   const classifier = new NaiveBayesClassifier();
+//   classifier.train(examples);
+//   classifierCache.set(organizationId, { classifier, loadedAt: now, examplesCount: examples.length });
+//   return classifier;
+// }
 
-const CLASSIFIER_TTL_MS = 60 * 60 * 1000;
-const classifierCache = new Map<string, CachedClassifier>();
-
-export function invalidateClassifier(organizationId: string): void {
-  classifierCache.delete(organizationId);
-}
-
-async function getClassifier(
-  organizationId: string,
-): Promise<NaiveBayesClassifier> {
-  const cached = classifierCache.get(organizationId);
-  const now = Date.now();
-
-  if (cached && now - cached.loadedAt < CLASSIFIER_TTL_MS) {
-    return cached.classifier;
-  }
-
-  const examples = await prisma.trainingExample.findMany({
-    where: { organizationId },
-    select: { text: true, label: true },
-  });
-
-  const classifier = new NaiveBayesClassifier();
-  classifier.train(examples);
-
-  classifierCache.set(organizationId, {
-    classifier,
-    loadedAt: now,
-    examplesCount: examples.length,
-  });
-
-  return classifier;
+/**
+ * Stub — вызывается из POST /api/messages/[id]/label.
+ * Если Bayes включён обратно — раскомментировать `classifierCache.delete(...)`.
+ */
+export function invalidateClassifier(_organizationId: string): void {
+  // classifierCache.delete(_organizationId);
 }
 
 export async function handleIncomingMessage(msg: IncomingMessage): Promise<void> {
@@ -102,28 +97,35 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     }
   }
 
-  const examplesCount = await prisma.trainingExample.count({
-    where: { organizationId },
-  });
-  if (examplesCount === 0) {
-    void seedDefaultExamples(organizationId).catch((e) =>
-      console.error('[handler] seed failed:', e),
-    );
-  }
-
-  const classifier = await getClassifier(organizationId);
-  const prediction = classifier.predict(msg.text);
-
-  if (prediction.confidence >= 0.3) {
-    console.log(
-      `[bayes] "${msg.text.slice(0, 50)}..." -> ${prediction.label} (${(prediction.confidence * 100).toFixed(0)}%)`,
-    );
-  }
-
-  if (prediction.label === 'SPAM' && prediction.confidence > 0.6) {
-    console.log(`[bayes] Спам отсечён: ${msg.externalChatId}`);
-    return;
-  }
+  // ── Bayes classifier — временно отключён ─────────────────────────
+  // Ранее: seed examples + predict + auto-drop SPAM.
+  // Причина отключения: ложные срабатывания на не-IT сферах,
+  // ghost feature, потеря реальных лидов.
+  // Включать при 200+ лейблов и 50+ спамах/день.
+  //
+  // const examplesCount = await prisma.trainingExample.count({ where: { organizationId } });
+  // if (examplesCount === 0) {
+  //   void seedDefaultExamples(organizationId).catch((e) =>
+  //     console.error('[handler] seed failed:', e),
+  //   );
+  // }
+  //
+  // const classifier = await getClassifier(organizationId);
+  // const prediction = classifier.predict(msg.text);
+  //
+  // if (prediction.confidence >= 0.3) {
+  //   console.log(
+  //     `[bayes] "${msg.text.slice(0, 50)}..." -> ${prediction.label} (${(prediction.confidence * 100).toFixed(0)}%)`,
+  //   );
+  // }
+  //
+  // ⚠️ Никогда не включать auto-drop без фидбек-лупа и UI-подтверждения.
+  // Причина: на 17 seed-примерах классификатор систематически ошибается,
+  // и реальный лид теряется молча.
+  // if (prediction.label === 'SPAM' && prediction.confidence > 0.6) {
+  //   console.log(`[bayes] Спам отсечён: ${msg.externalChatId}`);
+  //   return;
+  // }
 
   const contact = await contactService.findOrCreateByExternalId({
     organizationId,
@@ -168,6 +170,7 @@ export async function handleIncomingMessage(msg: IncomingMessage): Promise<void>
     organizationId,
   });
 }
+
 async function sendWelcomeButton(params: {
   botToken: string;
   chatId: string;
@@ -210,7 +213,6 @@ async function sendWelcomeButton(params: {
     },
   );
 }
-
 
 const DEAL_LOCK = new Map<string, Promise<string | null>>();
 

@@ -8,6 +8,7 @@ import {
   Database,
   Zap,
   Mail,
+  Users,
   type LucideIcon,
 } from 'lucide-react';
 import { auth } from '@/lib/auth';
@@ -53,6 +54,13 @@ const SECTIONS: SettingsSection[] = [
     title: 'Email-уведомления',
     description: 'SMTP-сервер, уведомления о заявках, дайджест',
     requiresOwnerOrAdmin: true,
+  },
+   {
+    href: '/settings/users',
+    icon: Users,
+    title: 'Пользователи',
+    description: 'Менеджеры, доступ, роли',
+    requiresOwnerOrAdmin: true,   
   },
 ];
 

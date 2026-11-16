@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import { auth } from '@/lib/auth';
+import { requireOwnerOrAdmin } from '@/lib/auth-helpers';
 
 export const runtime = 'nodejs';
 
 export async function GET(): Promise<Response> {
   const session = await auth();
-  if (!session?.user?.organizationId || !['OWNER', 'ADMIN'].includes(session.user.role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const denied = requireOwnerOrAdmin(session);
+  if (denied) return denied;
 
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) {

@@ -1,20 +1,13 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import type { Session } from 'next-auth';
 import { auth } from '@/lib/auth';
 import {
   getSettings,
   updateSettings,
   type SettingsUpdate,
 } from '@/lib/settings';
+import { requireOwnerOrAdmin } from '@/lib/auth-helpers';
 import * as tg from '@/lib/channels/telegram/client';
-
-
-
-function isAdminSession(session: Session | null): boolean {
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  return role === 'ADMIN' || role === 'OWNER';
-}
 
 function responseShape(settings: {
   telegramBotUsername?: string | null;
@@ -29,21 +22,15 @@ function responseShape(settings: {
   };
 }
 
-
 export async function GET(): Promise<Response> {
   const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  if (!isAdminSession(session)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const denied = requireOwnerOrAdmin(session);
+  if (denied) return denied;
 
   const settings = await getSettings();
 
   return NextResponse.json(responseShape(settings ?? {}));
 }
-
 
 const SaveSchema = z
   .object({
@@ -65,12 +52,8 @@ const SaveSchema = z
 
 export async function POST(request: Request): Promise<Response> {
   const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  if (!isAdminSession(session)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const denied = requireOwnerOrAdmin(session);
+  if (denied) return denied;
 
   const body = await request.json().catch(() => null);
   if (!body) {

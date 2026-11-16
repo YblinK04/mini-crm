@@ -1,4 +1,3 @@
-// src/components/tasks/TaskGroup.tsx
 
 'use client';
 
@@ -13,13 +12,8 @@ interface TaskGroupProps {
   onToggle: (task: ToggleTarget) => void;
   onRequestDelete: (task: TaskJSON) => void;
   onCancelDelete: (id: string) => void;
-  /** ID задач, ожидающих истечения undo-окна. */
   pendingIds: Set<string>;
-  /**
-   * Показывать ли кнопку удаления постоянно (без hover).
-   * Пробрасывается в каждый TaskItem. По умолчанию — по hover
-   * на десктопе, по фокусу и на тач-устройствах всегда.
-   */
+  
   alwaysShowDelete?: boolean;
 }
 

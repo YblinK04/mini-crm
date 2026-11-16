@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { slugify } from '@/lib/slugify';
+import { requireOwnerOrAdmin } from '@/lib/auth-helpers';
 
 const PatchSchema = z.object({
   slug: z
@@ -19,13 +20,17 @@ function isUniqueViolation(e: unknown): boolean {
 
 export async function GET() {
   const session = await auth();
-  if (!session?.user?.id || !session.user.organizationId) {
+  const denied = requireOwnerOrAdmin(session);
+  if (denied) return denied;
+
+  const organizationId = session?.user?.organizationId;
+  if (!organizationId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
     const org = await prisma.organization.findUnique({
-      where: { id: session.user.organizationId },
+      where: { id: organizationId },
       select: { name: true, publicSlug: true },
     });
 
@@ -46,7 +51,12 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
   const session = await auth();
-  if (!session?.user?.id || !session.user.organizationId) {
+  const denied = requireOwnerOrAdmin(session);
+  if (denied) return denied;
+
+  const userId = session?.user?.id;
+  const organizationId = session?.user?.organizationId;
+  if (!userId || !organizationId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -61,7 +71,6 @@ export async function PATCH(request: Request) {
   }
 
   const { slug } = parsed.data;
-  const { organizationId, id: userId } = session.user;
 
   try {
     const updated = await prisma.organization.update({
@@ -97,13 +106,17 @@ export async function PATCH(request: Request) {
 
 export async function POST() {
   const session = await auth();
-  if (!session?.user?.id || !session.user.organizationId) {
+  const denied = requireOwnerOrAdmin(session);
+  if (denied) return denied;
+
+  const organizationId = session?.user?.organizationId;
+  if (!organizationId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
     const org = await prisma.organization.findUnique({
-      where: { id: session.user.organizationId },
+      where: { id: organizationId },
       select: { name: true, publicSlug: true },
     });
 
@@ -112,23 +125,23 @@ export async function POST() {
     }
 
     const baseSlug = slugify(org?.name || 'crm');
-    
+
     for (let i = 0; i < 5; i++) {
       const newSlug = `${baseSlug}-${randomUUID().slice(0, 4)}`;
       try {
         const result = await prisma.organization.updateMany({
-          where: { id: session.user.organizationId, publicSlug: null },
+          where: { id: organizationId, publicSlug: null },
           data: { publicSlug: newSlug },
         });
         if (result.count > 0) return NextResponse.json({ slug: newSlug });
-        break; 
+        break;
       } catch (e) {
         if (!isUniqueViolation(e)) throw e;
       }
     }
-    
+
     const fresh = await prisma.organization.findUnique({
-      where: { id: session.user.organizationId },
+      where: { id: organizationId },
       select: { publicSlug: true },
     });
     return NextResponse.json({ slug: fresh?.publicSlug });

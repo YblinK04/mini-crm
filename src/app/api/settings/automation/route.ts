@@ -1,24 +1,14 @@
-
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getSettings, invalidateSettings } from '@/lib/settings';
-
-
-function isOwnerOrAdmin(role: string | undefined): boolean {
-  return role === 'OWNER' || role === 'ADMIN';
-}
-
+import { requireOwnerOrAdmin } from '@/lib/auth-helpers';
 
 export async function GET(): Promise<Response> {
   const session = await auth();
-  if (!session?.user?.id || !session.user.organizationId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  if (!isOwnerOrAdmin(session.user.role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const denied = requireOwnerOrAdmin(session);
+  if (denied) return denied;
 
   const settings = await getSettings();
 
@@ -30,7 +20,6 @@ export async function GET(): Promise<Response> {
     { headers: { 'Cache-Control': 'no-store' } },
   );
 }
-
 
 const UpdateSchema = z
   .object({
@@ -49,14 +38,13 @@ const UpdateSchema = z
 
 export async function PATCH(request: Request): Promise<Response> {
   const session = await auth();
-  if (!session?.user?.id || !session.user.organizationId) {
+  const denied = requireOwnerOrAdmin(session);
+  if (denied) return denied;
+  const userId = session?.user?.id;
+  const organizationId = session?.user?.organizationId;
+  if (!userId || !organizationId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  if (!isOwnerOrAdmin(session.user.role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  const { organizationId, id: userId } = session.user;
 
   const body = await request.json().catch(() => null);
   if (!body) {
@@ -84,7 +72,7 @@ export async function PATCH(request: Request): Promise<Response> {
     }
 
     const updated = await prisma.settings.update({
-      where: { id: existing.id, organizationId }, 
+      where: { id: existing.id, organizationId },
       data: {
         autoReplyEnabled: parsed.data.autoReplyEnabled,
         autoReplyText: parsed.data.autoReplyText || null,

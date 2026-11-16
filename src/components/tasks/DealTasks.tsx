@@ -95,8 +95,6 @@ export function DealTasks({ dealId }: DealTasksProps) {
     setConfirmTask(task);
   }, []);
 
-  // Сортировка и признак просрочки зависят от «сейчас».
-  // Пересчитываем только при изменении списка задач — не при каждом рендере.
   const sorted = useMemo(() => {
     const now = Date.now();
     return [...tasks].sort((a, b) => {

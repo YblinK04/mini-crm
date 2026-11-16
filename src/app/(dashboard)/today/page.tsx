@@ -30,7 +30,7 @@ export default async function TodayPage() {
       <Tabs defaultValue="list" className="w-full">
         <TabsList className="grid w-full max-w-[400px] grid-cols-2 mb-6">
           <TabsTrigger value="list" className="gap-2">
-            <ListTodo className="h-4 w-4" aria-hidden="true" /> Срочные
+            <ListTodo className="h-4 w-4" aria-hidden="true" /> Текущие задачи
           </TabsTrigger>
           <TabsTrigger value="calendar" className="gap-2">
             <CalendarDays className="h-4 w-4" aria-hidden="true" /> Календарь

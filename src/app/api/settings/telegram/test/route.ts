@@ -1,26 +1,16 @@
-
 import { NextResponse } from 'next/server';
-import type { Session } from 'next-auth';
 import { auth } from '@/lib/auth';
 import { getSettings } from '@/lib/settings';
+import { requireOwnerOrAdmin } from '@/lib/auth-helpers';
 import {
   getMe,
   TelegramApiError,
 } from '@/lib/channels/telegram/client';
 
-function isAdminSession(session: Session | null): boolean {
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  return role === 'ADMIN' || role === 'OWNER';
-}
-
 export async function POST(): Promise<Response> {
   const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  if (!isAdminSession(session)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const denied = requireOwnerOrAdmin(session);
+  if (denied) return denied;
 
   const settings = await getSettings();
   if (!settings?.telegramBotToken) {
