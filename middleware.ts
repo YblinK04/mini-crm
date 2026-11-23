@@ -11,7 +11,10 @@ function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith('/api/auth')) return true;     
   if (pathname.startsWith('/api/public')) return true;   
   if (pathname.startsWith('/api/webhooks')) return true; 
-  if (pathname === '/api/health') return true;           
+  if (pathname === '/api/health') return true;
+  if (pathname.startsWith('/f/')) return true;      
+  if (pathname.startsWith('/lead/')) return true;   
+  if (pathname.startsWith('/chat/')) return true;             
 
   return false;
 }

@@ -17,7 +17,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b">
-        <div className="container max-w-4xl px-4 sm:px-6 h-16 flex items-center justify-between">
+        <div className="container mx-auto max-w-4xl px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-6 w-6 text-emerald-600" aria-hidden="true" />
             <span className="font-bold text-lg">RealCRM</span>
@@ -28,7 +28,7 @@ export default function HomePage() {
         </div>
       </header>
 
-      <main className="container max-w-4xl px-4 sm:px-6 py-12 space-y-8">
+      <main className="container mx-auto max-w-4xl px-4 sm:px-6 py-12 space-y-8">
         <div className="text-center space-y-3">
           <div className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs px-3 py-1 rounded-full font-medium">
             <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
@@ -147,7 +147,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Версия */}
         <div className="text-center text-xs text-muted-foreground pt-8">
           RealCRM v0.1.0 · Если что-то не работает — <Link href="/install" className="underline hover:text-foreground">инструкция по устранению</Link> или напишите в поддержку.
         </div>

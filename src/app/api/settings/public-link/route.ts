@@ -6,12 +6,17 @@ import { prisma } from '@/lib/prisma';
 import { slugify } from '@/lib/slugify';
 import { requireOwnerOrAdmin } from '@/lib/auth-helpers';
 
+const RESERVED_SLUGS = ['api', 'login', 'register', 'settings', 'dashboard', 'lead', 'chat', 'f'];
+
 const PatchSchema = z.object({
   slug: z
     .string()
     .min(3, 'Минимум 3 символа')
     .max(32, 'Максимум 32 символа')
-    .regex(/^[a-z0-9-]+$/, 'Только латиница, цифры и дефис'),
+    .regex(/^[a-z0-9-]+$/, 'Только латиница, цифры и дефис')
+    .refine((val) => !RESERVED_SLUGS.includes(val), {
+      message: 'Этот адрес зарезервирован системой. Выберите другой.',
+    }),
 });
 
 function isUniqueViolation(e: unknown): boolean {
@@ -124,7 +129,7 @@ export async function POST() {
       return NextResponse.json({ slug: org.publicSlug });
     }
 
-    const baseSlug = slugify(org?.name || 'crm');
+    const baseSlug = slugify(org?.name || 'crm') || 'crm';
 
     for (let i = 0; i < 5; i++) {
       const newSlug = `${baseSlug}-${randomUUID().slice(0, 4)}`;
