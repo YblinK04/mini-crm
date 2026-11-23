@@ -1,18 +1,59 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: crm-postgres-local
-    restart: always
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: crm_user
-      POSTGRES_PASSWORD: crm_password
-      POSTGRES_DB: crm_local_db
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-crm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-crm}
+      TZ: ${TZ:-Europe/Moscow}
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c effective_cache_size=768MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=64MB
+      -c max_connections=30
+      -c timezone=${TZ:-Europe/Moscow}
     volumes:
-      - postgres_crm_data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crm} -d ${POSTGRES_DB:-crm}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks:
+      - crm-net
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-crm}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-crm}?schema=public
+      NEXTAUTH_URL: ${NEXTAUTH_URL:?NEXTAUTH_URL is required}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}
+      PUBLIC_URL: ${PUBLIC_URL:?PUBLIC_URL is required}
+      MASTER_ADMIN_EMAIL: ${MASTER_ADMIN_EMAIL:?MASTER_ADMIN_EMAIL is required}
+      MASTER_ADMIN_PASSWORD: ${MASTER_ADMIN_PASSWORD:?MASTER_ADMIN_PASSWORD is required}
+      TZ: ${TZ:-Europe/Moscow}
+      TELEGRAM_POLLING: ${TELEGRAM_POLLING:-false}
+      NODE_OPTIONS: "--max-old-space-size=768"
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - crm-net
 
 volumes:
-  postgres_crm_data:
+  pgdata:
+    driver: local
+
+networks:
+  crm-net:
+    driver: bridge

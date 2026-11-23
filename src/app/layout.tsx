@@ -8,8 +8,8 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
 export const metadata: Metadata = {
-  title: 'RealTask',
-  description: 'Professional Task Management System',
+  title: 'RealCrm',
+  description: 'Crm for People',
 };
 
 export default function RootLayout({
