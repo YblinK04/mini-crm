@@ -96,7 +96,7 @@ if [ -d "$INSTALL_DIR" ]; then
   git pull
 else
   # ⚠️ ЗАМЕНИ на свой репозиторий
-  git clone https://github.com/ВАШ-USER/mini-crm.git "$INSTALL_DIR"
+  git clone https://github.com/YblinK04/mini-crm "$INSTALL_DIR"
   cd "$INSTALL_DIR"
 fi
 
